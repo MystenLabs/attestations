@@ -1,0 +1,20 @@
+{
+  "name": "attestation-registry-ts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript library + CLI demo for the attestation_registry Move package.",
+  "scripts": {
+    "demo": "tsx demo/demo.ts",
+    "test": "tsx --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mysten/sui": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

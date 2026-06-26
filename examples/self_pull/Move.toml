@@ -1,0 +1,6 @@
+[package]
+name = "self_pull"
+edition = "2024"
+
+[dependencies]
+attestation_registry = { local = "../../packages/attestation_registry" }

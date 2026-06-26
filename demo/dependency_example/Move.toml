@@ -1,0 +1,5 @@
+[package]
+name = "dependency_example"
+edition = "2024"
+
+[dependencies]

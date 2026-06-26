@@ -1,0 +1,11 @@
+[package]
+name = "audit_example"
+edition = "2024"         # edition = "legacy" to use legacy (pre-2024) Move
+# license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
+# authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
+
+[dependencies]
+attestation_registry = { local = "../../packages/attestation_registry" }
+
+# Read more about the package management system options:
+# https://docs.sui.io/guides/developer/sui-101/move-package-management

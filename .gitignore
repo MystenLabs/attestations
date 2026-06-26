@@ -6,16 +6,11 @@ NOTES.md
 ts/node_modules/
 ts/dist/
 
-# Transient copies of upgrade modules, staged into sources/ by
-# demo/scripts/test-publish.sh only for the upgrade step. Canonical copies live
-# in each package's upgrade/ dir.
-demo/auditor_a/sources/audit_v2.move
-demo/dependency_example/sources/dependency_v2.move
+# Transient copy of the AuditV2 upgrade module, staged into sources/ by
+# scripts/test-publish.sh only for the upgrade step. Canonical copy lives in
+# examples/audit_example/upgrade/audit_v2.move.
+examples/audit_example/sources/audit_v2.move
 
 # Machine-readable demo output (registry id, subject, attester ids) consumed
 # by the MVR Postgres seeder.
 demo-ids.json
-
-# Security-audit output (`/move-audit` etc.). References confidential skill
-# internals; keep it local, never commit to the public fork.
-*_artifacts/

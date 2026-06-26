@@ -1,0 +1,6 @@
+[package]
+name = "subject_example"
+edition = "2024"
+
+[dependencies]
+dependency_example = { local = "../dependency_example" }
