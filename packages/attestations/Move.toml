@@ -1,0 +1,5 @@
+[package]
+name = "attestations"
+edition = "2024"
+
+[dependencies]
