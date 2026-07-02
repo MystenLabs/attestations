@@ -80,7 +80,7 @@ for block in content.split('[[published]]'):
 PY
 }
 
-for pkg in packages/attestations demo/auditor_a demo/auditor_b demo/dependency_example demo/subject_example; do
+for pkg in packages/attestations demo/auditor_a demo/auditor_b demo/auditor_c demo/dependency_example demo/subject_example; do
     name=$(basename "$pkg")
     echo
     echo "▶ test-publish $name"
@@ -147,6 +147,7 @@ echo "  ok"
 # both the `audit` and `audit_v2` modules); original-id is unchanged.
 PKG_AUDIT=$(parse_pkg_field auditor_a published-at)
 PKG_AUDITOR_B=$(parse_pkg_field auditor_b published-at)
+PKG_AUDITOR_C=$(parse_pkg_field auditor_c published-at)
 
 if [[ -z "$PKG_AUDIT" ]]; then
     echo "could not resolve package addresses from $PUBFILE — skipping display registration"
@@ -169,6 +170,7 @@ else
 
     register_display register_audit_display     "$PKG_AUDIT"     audit      register_audit_display
     register_display register_auditor_b_display "$PKG_AUDITOR_B" audit      register_audit_display
+    register_display register_auditor_c_display "$PKG_AUDITOR_C" audit      register_audit_display
 
     # AuditV2: register its Display, then APPEND a `methodology` field via
     # add_display_field — a runtime exercise of add_display_field. The shared

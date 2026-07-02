@@ -12,6 +12,7 @@
 #   - audit the subject with v1 Audit (revoked at the end)
 #   - an Audit from Auditor B (a second, untrusted auditor identity) + an
 #     attest_internal_note on the subject (both filtered out by a trust consumer)
+#   - Audits from Auditor C (a second trusted auditor) on the subject + dependency v1
 #   - revoke the subject's v1 audit
 #   - write demo-ids.json for the MVR seeder
 #
@@ -47,6 +48,7 @@ DEP_V1=$(parse_pkg_field dependency_example original-id)   # v1 id (audited)
 DEP_V2=$(parse_pkg_field dependency_example published-at)  # v2 id (latest, unaudited)
 SUBJ=$(parse_pkg_field subject_example published-at)
 AUDITOR_B=$(parse_pkg_field auditor_b published-at)
+AUDITOR_C=$(parse_pkg_field auditor_c published-at)
 
 # The object id of the single `structtype` object owned by `addr`.
 find_owned() {
@@ -100,6 +102,11 @@ sui client ptb \
     --move-call "$AUDIT::audit_v2::attest_internal_note" "@$REGISTRY" "@$SUBJ" '"no Display registered"' \
     >/dev/null
 
+echo "▶ Auditor C audits (a second trusted auditor): subject + dependency v1"
+AUDITOR_C_CAP=$(find_owned "$ADDR" "$AUDITOR_C::audit::AuditAdminCap")
+bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$SUBJ" "Subject audit — no critical findings" "https://auditor-c.example/subject.pdf" "$PUBDATE" >/dev/null
+bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — clean" "https://auditor-c.example/dependency.pdf" "$PUBDATE" >/dev/null
+
 echo "▶ revoke the subject's v1 audit (the dependency v1 audit stays active)"
 bash "$OPS/revoke-audit.sh" "$AUDIT" "$CAP" "$SUBJ_BOX" "$SUBJ_AUDIT_V1"
 
@@ -123,6 +130,11 @@ cat > "$DEMO_IDS" <<EOF
       "name": "auditor_a",
       "originalId": "$AUDIT_ORIG",
       "latestId": "$AUDIT"
+    },
+    {
+      "name": "auditor_c",
+      "originalId": "$AUDITOR_C",
+      "latestId": "$AUDITOR_C"
     }
   ],
   "untrustedAttestors": [
