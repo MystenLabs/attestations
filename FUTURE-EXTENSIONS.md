@@ -66,16 +66,22 @@ being discharged matches what was opened (with an `EBorrowMismatch` code).
 Modeled on `sui::borrow::Referent` / `Borrow`. Bytecode-enforced, no
 discipline note required.
 
-### Why not a `T: copy` read-by-copy shape
+### A `T: copy` read-by-copy shape (deferred)
 
 A simpler one-call `data<T: store + copy>(box, rcv): T` that receives the
-attestation, copies its payload out, and transfers it back was considered and
-**rejected** — not merely deferred. Requiring `T: copy` would let anyone who can
-reach an attestation copy its payload out and re-mint it: reissue an attestation
-after it was revoked, or mint one with a different timestamp — defeating the
-uniqueness and permanence the `key`-only design guarantees. The hot-potato
-pattern keeps the attestation a single, non-copyable object throughout, so it is
-the only viable inspection shape.
+attestation, copies its payload out, and transfers it back is **deferred**.
+
+The original objection — that a copyable payload would let anyone re-mint an
+attestation from it, reissuing one after revocation or restamping its timestamp
+— no longer holds. `attest` is gated by `Permit<T>`, and only `T`'s defining
+module can mint a permit, so a third party holding a copy of `T` still cannot
+issue an attestation carrying it. The `Attestation<T>` wrapper stays `key`-only
+and non-copyable either way.
+
+What remains is a narrower trade-off: `T: copy` would restrict the accessor to
+copyable payloads, where the hot potato serves every `T: store`. It would be a
+convenience overload rather than a replacement — worth adding if a schema wants
+it.
 
 The hot potato incurs a `&mut Box` serialization cost because
 `transfer::receive` requires `&mut UID` — concurrent on-chain reads against the

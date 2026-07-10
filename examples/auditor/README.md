@@ -134,15 +134,18 @@ query {
     pageInfo { hasNextPage endCursor }
     nodes {
       address
-      asMoveObject { contents { json } }
+      asMoveObject { contents { json display { output errors } } }
     }
   }
 }
 ```
 
 Each node is one attestation; `contents.json` carries its `subject` and your
-`Audit` fields. If you've added attestation types in an upgrade (e.g. `AuditV2`),
-query each type the same way.
+`Audit` fields. `contents.display.output` shows the same rendered fields a wallet
+or explorer would present, so it's the quickest way to check that your
+`register_display` templates interpolate as you intended — `display.errors`
+reports any that failed to render. If you've added attestation types in an
+upgrade (e.g. `AuditV2`), query each type the same way.
 
 ## Revoking an attestation
 
