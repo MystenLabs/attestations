@@ -58,12 +58,17 @@ MVP.)
 
 ## Building and testing
 
-Each Move package builds and tests independently. Run from the package's
-directory:
+```bash
+bash scripts/check.sh                          # every package
+bash scripts/check.sh packages/attestations    # just the ones named
+```
+
+`check.sh` attempts every package even if one fails, and exits nonzero if any
+did. Each Move package also builds and tests independently, but they pin
+env-specific dependencies, so a direct `sui move test` needs a build env:
 
 ```bash
-cd packages/attestations && sui move test
-cd examples/auditor              && sui move test
+cd packages/attestations && sui move test --build-env testnet
 ```
 
 ## Running the demo
@@ -78,14 +83,21 @@ subject keeps its `AuditV2` as the live signal).
 ### One-command (recommended for iteration)
 
 ```bash
-bash demo/scripts/run-demo.sh
+bash demo/scripts/demo-up.sh                            # chain only
+MVR_DIR=/path/to/mvr bash demo/scripts/demo-up.sh       # + demo_server :8000, app :3000
+bash demo/scripts/demo-down.sh                          # idempotent; always safe
 ```
 
-`demo/scripts/run-demo.sh` owns the full lifecycle: kills any stale localnet,
-starts a fresh `sui start --with-faucet`, waits for the JSON-RPC and faucet
-ports, faucets gas, test-publishes all packages, registers Displays,
-runs the demo, and **kills the localnet on exit** (success or failure).
-Override the sui CLI binary with `SUI=/path/to/sui bash demo/scripts/run-demo.sh`.
+`demo-up.sh` brings up the stack and tears it all down on Ctrl-C. Underneath it,
+`demo/scripts/run-demo.sh` owns the chain lifecycle: it starts a fresh localnet,
+waits for readiness, faucets gas, test-publishes every package, registers
+Displays, runs the demo, and stops the localnet **and its Postgres** on exit.
+Override the sui CLI binary with `SUI=/path/to/sui`.
+
+`SIGKILL` (`kill -9`, `pkill -9`, a reaped background shell) skips every shell
+trap, so nothing gets to clean up and the demo's Postgres is left running. Use
+Ctrl-C, and if a stack does get killed that way run `demo-down.sh` — it reclaims
+the ports and removes the scratch dirs without relying on any trap having run.
 
 ### Step-by-step (testnet or manual exploration)
 
