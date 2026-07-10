@@ -251,7 +251,7 @@ attestations.
   operation).
 
 The Box is created explicitly (`create_box(registry, subject)`, which is
-idempotent and claims both the active and revoked box). It's a prerequisite
+idempotent and claims the active box). It's a prerequisite
 for `revoke`, not `attest` — `attest` transfers to the derived active-box
 *address* whether or not a Box object exists there yet — so the only cost is a
 one-time setup before a subject's first revoke, in exchange for the two

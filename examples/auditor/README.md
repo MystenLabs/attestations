@@ -99,8 +99,8 @@ sui client ptb \
 `<subject>` is the id of the package (or any object) you reviewed, and
 `<published-at-ms>` is the publication date in milliseconds since the Unix epoch.
 In a `--move-call` target, the package can be its mvr name — e.g. the
-`@your-org/audits` you registered — instead of an address; the object arguments
-(`@<registry>`, `@<admin-cap>`, …) must be addresses.
+`@your-org/audits` you registered — instead of an address; the other arguments
+(`@<registry>`, `@<admin-cap>`, `@<subject>`, …) must be addresses.
 
 This writes the unsigned transaction bytes to `attest-tx.b64`, with the multisig
 as sender; hand that file to your multisig to sign to threshold and execute (for

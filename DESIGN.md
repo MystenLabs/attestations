@@ -24,10 +24,12 @@ The whole design follows from four choices:
   no public function returns one by value, so external callers can't transfer,
   wrap, or drop it. Once created it cannot be destroyed; its only dispositions
   are `attest` and `revoke` (see "Lifecycle invariant").
-- **Status is which box owns it.** Each subject has two claimed boxes — *active*
-  and *revoked*. An attestation carries no status field; it is revoked iff it
-  lives in the revoked box, so enumerating the active box yields exactly the
-  un-revoked set.
+- **Status is which address owns it.** Each subject has two derived box
+  addresses — *active* and *revoked*. An attestation carries no status field; it
+  is revoked iff it lives at the revoked address, so enumerating the active
+  address yields exactly the un-revoked set. Only the active address holds a
+  claimed `Box` object (`revoke` needs it to `receive`); the revoked address just
+  owns objects.
 
 Everything cross-cutting — revocation *policy*, expiration, dependency
 relationships — is pushed out of the core: revocation authority to the schema
@@ -37,31 +39,33 @@ relationships — is pushed out of the core: revocation authority to the schema
 
 ```
 Registry (shared singleton)
-  ├── BoxKey{subject, revoked:false} → active Box  → owns un-revoked Attestation<T> (TTO)
-  └── BoxKey{subject, revoked:true}  → revoked Box → owns revoked Attestation<T> (TTO)
+  ├── BoxKey{subject, revoked:false} → active Box      → owns un-revoked Attestation<T> (TTO)
+  └── BoxKey{subject, revoked:true}  → revoked address → owns revoked Attestation<T> (no object)
 ```
 
 - **`Registry`** is a `key`-only shared singleton, created in `init`; all per-subject box addresses are derived from its UID.
-- **`Box`** is `key`-only and per-subject. `create_box` claims *both* boxes for
-  a subject at once, and is idempotent (a no-op for boxes that already exist, so
-  a revoker can always call it before `revoke`). Each box address
-  is `derived_object::derive_address(registry, BoxKey { subject, revoked })` —
+- **`Box`** is `key`-only and per-subject. `create_box` claims the *active* box
+  and is idempotent (a no-op if it already exists, so a revoker can always call
+  it before `revoke`). Each box address is
+  `derived_object::derive_address(registry, BoxKey { subject, revoked })` —
   *computable off-chain* from `(registry_id, subject_id)`. Consumers read a
-  subject's un-revoked attestations from the active box via
+  subject's un-revoked attestations from the active address via
   `getOwnedObjects(box_addr, filter={StructType: ...})`, with native
   server-side type filtering.
 - **`Attestation<T: store>`** is transferred to the active box *address*
   (`derive_address(registry, {subject, false})`) — `attest` needs no `Box`
-  object, so the box can be created lazily; `revoke` moves it to the revoked box.
+  object, so the box can be created lazily; `revoke` moves it to the revoked
+  address.
 
-The Box is a real object (not just a derived address) — needed by `revoke`, not
-by `attest` — because it stores its `BoxKey` (so a viewer reading the object
-knows the subject and which box) and its parent `registry: ID`, so `revoke` can
-derive the sibling box without `&Registry`. It also gives `transfer::receive` a `&mut UID`
-to borrow at the address; without an object there, nothing could receive an
-attestation back. Earlier iterations encoded status as an on-chain `enum Status`
-and then an `active: bool` flag; both made every off-chain read pay a per-object
-status filter, which box membership avoids.
+The active Box is a real object (not just a derived address) because `revoke`
+needs a `&mut UID` to borrow at that address for `transfer::receive`; without an
+object there, nothing could receive an attestation back. `attest` needs no
+object, and nothing ever receives *from* the revoked address, so no revoked-box
+object is created. The Box stores only its parent `registry: ID`, so `revoke`
+can derive the sibling (revoked) address without `&Registry`. Earlier iterations
+encoded status as an on-chain `enum Status` and then an `active: bool` flag; both
+made every off-chain read pay a per-object status filter, which box membership
+avoids.
 
 ### Why TTO, not DOF
 
@@ -83,7 +87,7 @@ public struct Attestation<T: store> has key {
 }
 ```
 
-Once created, an Attestation is never destroyed, and it is always owned by a box - either the active or revoked box for its `subject`. Attestations are created in the active box by `attest`; `revoke` transfers them from the active box to the revoked box. The revoked box is terminal - attestations are never transferred away from there.
+Once created, an Attestation is never destroyed, and it is always owned by one of its `subject`'s two box addresses — active or revoked. Attestations are created at the active address by `attest`; `revoke` transfers them from the active box to the revoked address. The revoked address is terminal - attestations are never transferred away from there.
 
 ## Attester identity: trust and gating
 
@@ -109,17 +113,20 @@ permit, not a bare path to forge `Attestation<T>` from a stray `T` value.
 ## Revocation: `Permit<T>`-gated, policy in the schema
 
 ```move
-public fun attest<T: store>(registry: &Registry, _: Permit<T>, subject: ID, data, ctx): ID
+public fun attest<T: store>(registry: ID, _: Permit<T>, subject: ID, data, ctx): ID
 public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestation<T>>)
 ```
 
 `attest` transfers the attestation to `subject`'s active box *address* (derived
 from the registry id) and returns its `ID` — the one piece a schema can't
 otherwise recover, since the object goes straight to the box — so a schema can
-bind a bearer cap to it, log it, or ignore it. It takes no `Box`, so the box
-need not exist yet; `create_box` is only a prerequisite for `revoke`. `revoke`
-receives the attestation and moves it to the revoked box (address derived from
-the Box's stored `registry`), emitting `Revoked<T>`.
+bind a bearer cap to it, log it, or ignore it. It takes the registry by `id`,
+not by reference: it only needs the id to derive the address, and passing the
+shared `Registry` object would force the transaction through consensus, whereas
+by id `attest` has no shared inputs and can run on the owned-object fast path. It
+takes no `Box`, so the box need not exist yet; `create_box` is only a
+prerequisite for `revoke`. `revoke` receives the attestation and moves it to the
+revoked address (derived from the Box's stored `registry`), emitting `Revoked<T>`.
 
 The move and event stay uniform here; the *authority* does not. Because `revoke`
 is gated by `Permit<T>` (see "Attester identity: trust and gating"), the base
@@ -129,8 +136,8 @@ base nothing in expressiveness; every policy, including a per-attestation bearer
 cap, is reconstructable schema-side (see "Schema-level patterns").
 
 Revocation is **terminal in the current bytecode** — no function un-revokes —
-but not cryptographically permanent: the revoked box is a real shared object, so
-a future upgrade could add a receive-back path. The property given up is
+but not cryptographically permanent: a future upgrade could claim a `Box` at the
+revoked address and add a receive-back path. The property given up is
 bytecode-provable irrevocability; a schema is permanent only by exposing no
 revoke path. That's weaker than burning a cap, but upgrade authority is already
 attestation-dynamics authority.

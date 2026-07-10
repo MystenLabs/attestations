@@ -9,7 +9,7 @@ didn't include it, and what concrete use case would justify adding it.
 The shipped registry has no public surface for reading an attestation's data
 or status from Move code. The only public functions touching `Attestation<T>`
 by value are `attest` (constructs) and `revoke` (receives via
-`transfer::receive` and moves the attestation to the subject's revoked box).
+`transfer::receive` and moves the attestation to the subject's revoked address).
 Accessors (`subject`, `data`) exist but are unreachable from outside the package
 because no public function returns an `Attestation<T>` or hands out a
 `&Attestation<T>`. An attestation's status is which box owns it, not a field on

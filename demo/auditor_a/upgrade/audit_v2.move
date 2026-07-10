@@ -14,7 +14,7 @@ use std::internal;
 use std::string::String;
 use sui::display_registry::{DisplayRegistry, Display, DisplayCap};
 use sui::transfer::Receiving;
-use attestations::attestations::{Registry, Box, Attestation};
+use attestations::attestations::{Registry, Box, Attestation, attest};
 use auditor_a::audit::AuditAdminCap;
 
 /// V2 audit payload: keeps the numeric `score`, plus the description and
@@ -87,7 +87,7 @@ public fun add_audit_v2_methodology_display(
 /// `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
 public fun attest_audit_v2(
     _: &AuditAdminCap,
-    registry: &Registry,
+    registry: ID,
     subject: ID,
     description: String,
     report_url: String,
@@ -95,7 +95,8 @@ public fun attest_audit_v2(
     score: u8,
     ctx: &mut TxContext,
 ) {
-    registry.attest(
+    attest(
+        registry,
         internal::permit<AuditV2>(),
         subject,
         AuditV2 { description, report_url, published_at_ms, score },
@@ -132,8 +133,9 @@ public struct InternalNote has store, drop {
 /// Issue an InternalNote attestation. No Display is registered for
 /// `Attestation<InternalNote>`, so Display-gating consumers ignore it.
 /// Unrevocable — this schema exposes no revoke wrapper (negative test data).
-public fun attest_internal_note(registry: &Registry, subject: ID, text: String, ctx: &mut TxContext) {
-    registry.attest(
+public fun attest_internal_note(registry: ID, subject: ID, text: String, ctx: &mut TxContext) {
+    attest(
+        registry,
         internal::permit<InternalNote>(),
         subject,
         InternalNote { text },

@@ -9,10 +9,6 @@ use sui::event;
 use sui::transfer::Receiving;
 
 #[error(code = 0)]
-const ERevokeFromWrongBox: vector<u8> =
-    b"Pass the subject's active Box to revoke, not its revoked one";
-
-#[error(code = 1)]
 const EFieldExists: vector<u8> =
     b"Display field already exists; add_display_field is append-only";
 
@@ -21,27 +17,23 @@ public struct Registry has key {
     id: UID,
 }
 
-/// Derived-address key for one of a subject's two boxes. `revoked: false` keys
-/// the active box, `revoked: true` the revoked box; both are claimed, shared
-/// `Box` objects (siblings under the same `Registry`), so off-chain consumers
-/// compute either address from `(registry_id, subject_id)`.
+/// Derived-address key for one of a subject's two box addresses. `revoked: false`
+/// keys the active address, `revoked: true` the revoked address. Off-chain
+/// consumers compute either address from `(registry_id, subject_id)`; on-chain,
+/// `attest` sends to the active address and `revoke` moves to the revoked one.
 public struct BoxKey has copy, drop, store {
     subject: ID,
     revoked: bool,
 }
 
-/// Per-subject child of `Registry`. Each subject has two, both created by
-/// `create_box`: the *active* box (`key.revoked == false`) and the *revoked*
-/// box (`key.revoked == true`). An attestation lives in one of them via
-/// transfer-to-object, and its status *is* which box owns it — an attestation
-/// is revoked iff its owner box's `key.revoked` is true.
-///
-/// The Box stores its own `key` (so its address is recomputable, and an
-/// attestation's status is readable from its owner) and its parent `registry`
-/// id (so `revoke` can derive the sibling box's address).
+/// The claimed, shared object at a subject's *active* box address, created by
+/// `create_box`. It exists only so `revoke` has a `&mut UID` to `receive` an
+/// attestation from. There is no revoked-box object: `revoke` transfers to the
+/// revoked *address* (nobody receives from it), and an attestation's status *is*
+/// which address owns it. Carries its parent `registry` id so `revoke` can
+/// derive the revoked sibling address.
 public struct Box has key {
     id: UID,
-    key: BoxKey,
     registry: ID,
 }
 
@@ -51,8 +43,8 @@ public struct Box has key {
 /// **Lifecycle invariant**: `key`-only (no `store`, no `drop`). No public
 /// function returns one by value, so external callers can't transfer, wrap, or
 /// drop it. Its only dispositions are `attest` (into the active box) and
-/// `revoke` (from the active box to the revoked box); its status is which box
-/// owns it, not a field here.
+/// `revoke` (from the active box to the revoked address); its status is which
+/// address owns it, not a field here.
 public struct Attestation<T: store> has key {
     id: UID,
     subject: ID,
@@ -71,11 +63,11 @@ public struct Revoked<phantom T> has copy, drop {
 
 // === Setup ===
 
-/// Create and share a subject's two `Box`es (active + revoked). Idempotent: a
-/// no-op for either box that already exists.
+/// Create and share a subject's active `Box`, the object `revoke` receives from.
+/// Idempotent: a no-op if it already exists. There is no revoked box to create —
+/// `revoke` transfers to the revoked address, which needs no object.
 public fun create_box(registry: &mut Registry, subject: ID) {
     registry.claim_box(BoxKey { subject, revoked: false });
-    registry.claim_box(BoxKey { subject, revoked: true });
 }
 
 // === Accessors ===
@@ -93,15 +85,19 @@ public fun attester_of<T>(): address { type_name::original_id<T>() }
 
 // === Attest / Revoke ===
 
-/// Attest about `subject` with `data`. Gated by `Permit<T>`: only `T`'s
-/// defining module can mint one, so authority to attest lives in that module —
-/// uniform with `revoke` and `register_display`. The attestation goes to
-/// `subject`'s *active* box address (`derive_address(registry, {subject,
-/// false})`); the box need not exist yet — only `revoke` needs the `Box`
-/// object. Returns the new attestation's `ID`, the one piece a schema can't
-/// otherwise recover since the object goes straight to the box.
+/// Attest about `subject` with `data`. Takes the registry by `id`, not by
+/// reference: `attest` only needs the id to derive the box address, and passing
+/// the shared `Registry` object would force the transaction through consensus —
+/// by id it has no shared inputs and can run on the owned-object fast path.
+/// Gated by `Permit<T>`: only `T`'s defining module can mint one, so authority
+/// to attest lives in that module — uniform with `revoke` and `register_display`.
+/// The attestation goes to `subject`'s *active* box address
+/// (`derive_address(registry, {subject, false})`); the box need not exist yet —
+/// only `revoke` needs the `Box` object. Returns the new attestation's `ID`, the
+/// one piece a schema can't otherwise recover since the object goes straight to
+/// the box.
 public fun attest<T: store>(
-    registry: &Registry,
+    registry: ID,
     _: Permit<T>,
     subject: ID,
     data: T,
@@ -110,7 +106,7 @@ public fun attest<T: store>(
     let attestation = Attestation<T> { id: object::new(ctx), subject, data };
     let attestation_id = object::id(&attestation);
     let box_addr = derived_object::derive_address(
-        object::id(registry),
+        registry,
         BoxKey { subject, revoked: false },
     );
     event::emit(Attested<T> { subject });
@@ -119,7 +115,7 @@ public fun attest<T: store>(
 }
 
 /// Revoke the attestation referenced by `rcv`: receive it from the active
-/// `box` and move it to the subject's revoked box. Terminal — there is no
+/// `box` and move it to the subject's revoked address. Terminal — there is no
 /// un-revoke. `rcv` alone identifies which attestation.
 ///
 /// Gated by `Permit<T>`: only `T`'s defining module can mint one, so the
@@ -131,15 +127,14 @@ public fun revoke<T: store>(
     _: Permit<T>,
     rcv: Receiving<Attestation<T>>,
 ) {
-    assert!(!box.key.revoked, ERevokeFromWrongBox);
     let a = transfer::receive(&mut box.id, rcv);
     let subject = a.subject;
-    let revoked_box = derived_object::derive_address(
+    let revoked_addr = derived_object::derive_address(
         box.registry,
         BoxKey { subject, revoked: true },
     );
     event::emit(Revoked<T> { subject });
-    transfer::transfer(a, revoked_box);
+    transfer::transfer(a, revoked_addr);
 }
 
 // === Display ===
@@ -214,15 +209,15 @@ fun claim_box(registry: &mut Registry, key: BoxKey) {
     if (derived_object::exists(&registry.id, key)) return;
     let registry_id = object::id(registry);
     let id = derived_object::claim(&mut registry.id, key);
-    transfer::share_object(Box { id, key, registry: registry_id });
+    transfer::share_object(Box { id, registry: registry_id });
 }
 
 // === Test seam ===
 
-/// Address of a subject's active (`revoked == false`) or revoked
-/// (`revoked == true`) box. Tests use it to locate the two boxes; production
-/// callers don't need it (off-chain consumers derive box addresses themselves,
-/// and `BoxKey` is module-private so there's nothing to expose on-chain).
+/// A subject's active (`revoked == false`) or revoked (`revoked == true`) box
+/// address. Tests use it to locate either address; production callers don't need
+/// it (off-chain consumers derive box addresses themselves, and `BoxKey` is
+/// module-private so there's nothing to expose on-chain).
 #[test_only]
 public fun box_address(registry: &Registry, subject: ID, revoked: bool): address {
     derived_object::derive_address(object::id(registry), BoxKey { subject, revoked })

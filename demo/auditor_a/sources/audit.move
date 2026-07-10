@@ -4,7 +4,7 @@ use std::internal;
 use std::string::String;
 use sui::display_registry::DisplayRegistry;
 use sui::transfer::Receiving;
-use attestations::attestations::{Registry, Box, Attestation};
+use attestations::attestations::{Registry, Box, Attestation, attest};
 
 /// Audit attestation payload. Lifecycle for `Attestation<Audit>` is controlled by the `AuditAdminCap`
 public struct Audit has store, drop {
@@ -64,14 +64,15 @@ entry fun register_audit_display(
 /// the single authority over this auditor's attestations.
 public fun attest_audit(
     _: &AuditAdminCap,
-    registry: &Registry,
+    registry: ID,
     subject: ID,
     description: String,
     report_url: String,
     published_at_ms: u64,
     ctx: &mut TxContext,
 ) {
-    registry.attest(
+    attest(
+        registry,
         internal::permit<Audit>(),
         subject,
         Audit { description, report_url, published_at_ms },

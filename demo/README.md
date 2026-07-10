@@ -63,5 +63,5 @@ filtered out by attester *identity* (same type, different package), and the
 `@demo/dependency` has two versions — v1 is audited (Active) but v2 (the latest)
 is left unaudited — so the Security page shows the latest version with a "no
 published audits" warning alongside the audited older version.
-Revoked attestations remain readable from each subject's revoked box — a consumer
+Revoked attestations remain readable from each subject's revoked box address — a consumer
 typically lists them separately so they don't read as endorsements.

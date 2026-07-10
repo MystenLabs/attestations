@@ -33,7 +33,7 @@ fun attest_audit_cross_package() {
     registry.create_box(subject);
     let active = box_id(&registry, subject, false);
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(&registry, subject, description(), report_url(), published_at(), scenario.ctx());
+    admin.attest_audit(object::id(&registry), subject, description(), report_url(), published_at(), scenario.ctx());
     transfer::public_transfer(admin, ALICE);
     test_scenario::return_shared(registry);
 
@@ -58,7 +58,7 @@ fun attest_audit_cross_package() {
 }
 
 /// The admin-cap policy: a holder of `AuditAdminCap` issues then revokes an
-/// audit, moving it from the active box into the (claimed) revoked box.
+/// audit, moving it from the active box onto the revoked address.
 #[test]
 fun revoke_audit_with_admin_cap() {
     let subject = subject_for(@0xDEAD);
@@ -71,7 +71,7 @@ fun revoke_audit_with_admin_cap() {
     let active = box_id(&registry, subject, false);
     let revoked = box_id(&registry, subject, true);
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(&registry, subject, description(), report_url(), published_at(), scenario.ctx());
+    admin.attest_audit(object::id(&registry), subject, description(), report_url(), published_at(), scenario.ctx());
     test_scenario::return_shared(registry);
 
     scenario.next_tx(ALICE);
@@ -89,7 +89,7 @@ fun revoke_audit_with_admin_cap() {
     transfer::public_transfer(admin, ALICE);
     test_scenario::return_shared(active_box);
 
-    // The audit left the active box for the revoked box.
+    // The audit left the active box for the revoked address (no Box there).
     scenario.next_tx(ALICE);
     let active_box: Box = scenario.take_shared_by_id(active);
     assert!(
@@ -98,14 +98,12 @@ fun revoke_audit_with_admin_cap() {
         ).is_empty(),
     );
     test_scenario::return_shared(active_box);
-    let revoked_box: Box = scenario.take_shared_by_id(revoked);
     assert_eq!(
         test_scenario::receivable_object_ids_for_owner_id<Attestation<Audit>>(
-            object::id(&revoked_box),
+            revoked,
         ).length(),
         1,
     );
-    test_scenario::return_shared(revoked_box);
 
     scenario.end();
 }

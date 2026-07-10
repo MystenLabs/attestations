@@ -8,9 +8,10 @@ reading the code.
 
 A typed attestation registry for Sui. `Attestation<T>` wraps an arbitrary schema
 `T`, and only `T`'s defining module can mint the `Permit<T>` that authorizes
-`attest`, `revoke`, and `register_display`. Each subject has two claimed shared
-`Box`es (active and revoked); an attestation's status is simply which box owns
-it. Rationale is in `DESIGN.md`; Display field conventions in `CONVENTIONS.md`.
+`attest`, `revoke`, and `register_display`. Each subject has one claimed `Box`
+(the active box) plus a derived revoked address; an attestation's status is
+simply which of the two owns it. Rationale is in `DESIGN.md`; Display field
+conventions in `CONVENTIONS.md`.
 
 ## Layout
 
