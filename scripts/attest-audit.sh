@@ -3,7 +3,7 @@
 # over auditor::attest_audit (admin-cap-gated); the AuditAdminCap gates both
 # attest and revoke. The subject's box need not exist yet (only revoke needs it).
 #
-# Usage: attest-audit.sh <audit-pkg> <admin-cap> <registry> <subject> <description> <report-url> <publish-date-ms>
+# Usage: attest-audit.sh <audit-pkg> <admin-cap> <registry> <subject> <description> <report-url> <published-at-ms>
 set -euo pipefail
 AUDITPKG=$1; CAP=$2; REGISTRY=$3; SUBJECT=$4; DESC=$5; URL=$6; PUBDATE=$7
 

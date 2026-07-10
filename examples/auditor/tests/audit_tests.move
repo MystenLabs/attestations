@@ -13,7 +13,7 @@ const ALICE: address = @0xA11CE;
 fun subject_for(addr: address): ID { addr.to_id() }
 fun description(): String { b"Clean audit — no findings.".to_string() }
 fun report_url(): String { b"https://audits.example.com/r.pdf".to_string() }
-fun publish_date(): u64 { 1_700_000_000_000 }
+fun published_at(): u64 { 1_700_000_000_000 }
 
 fun box_id(registry: &Registry, subject: ID, revoked: bool): ID {
     object::id_from_address(registry.box_address(subject, revoked))
@@ -33,7 +33,7 @@ fun attest_audit_cross_package() {
     registry.create_box(subject);
     let active = box_id(&registry, subject, false);
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(&registry, subject, description(), report_url(), publish_date(), scenario.ctx());
+    admin.attest_audit(&registry, subject, description(), report_url(), published_at(), scenario.ctx());
     transfer::public_transfer(admin, ALICE);
     test_scenario::return_shared(registry);
 
@@ -71,7 +71,7 @@ fun revoke_audit_with_admin_cap() {
     let active = box_id(&registry, subject, false);
     let revoked = box_id(&registry, subject, true);
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(&registry, subject, description(), report_url(), publish_date(), scenario.ctx());
+    admin.attest_audit(&registry, subject, description(), report_url(), published_at(), scenario.ctx());
     test_scenario::return_shared(registry);
 
     scenario.next_tx(ALICE);

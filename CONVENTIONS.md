@@ -34,9 +34,9 @@ consumers.
 - **`image_url`** — an image for the attestation: a grade badge, report
   thumbnail, etc.
 - **`link`** — a URL to the full artifact (the audit report, the CVE record).
-- **`publish_date`** — publication date of the attested artifact (e.g. an audit
+- **`published_at`** — publication date of the attested artifact (e.g. an audit
   report), so consumers can show "published on …". Rendered from a `u64` ms field
-  via Display V2's `:ts` transform (`{data.publish_date_ms:ts}`). It's
+  via Display V2's `:ts` transform (`{data.published_at_ms:ts}`). It's
   *attester-supplied*, so it can be backdated — a consumer needing a trustworthy
   "first seen" should use the attestation object's on-chain creation time instead.
 

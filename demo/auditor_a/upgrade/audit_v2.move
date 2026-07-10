@@ -18,7 +18,7 @@ use attestations::attestations::{Registry, Box, Attestation};
 use auditor_a::audit::AuditAdminCap;
 
 /// V2 audit payload: keeps the numeric `score`, plus the description and
-/// publish-date the reference schema carries.
+/// publication timestamp the reference schema carries.
 public struct AuditV2 has store, drop {
     /// Human-readable summary of the audit, surfaced via the `description`
     /// presentation field.
@@ -26,8 +26,8 @@ public struct AuditV2 has store, drop {
     /// URL of the full audit report (surfaced via the `link` convention).
     report_url: String,
     /// Report publication date (ms since epoch), surfaced via the
-    /// `publish_date` convention.
-    publish_date_ms: u64,
+    /// `published_at` convention.
+    published_at_ms: u64,
     /// Numeric audit score, surfaced via the custom `score` field.
     score: u8,
 }
@@ -49,7 +49,7 @@ public fun register_audit_v2_display(
             b"description".to_string(),
             b"link".to_string(),
             b"image_url".to_string(),
-            b"publish_date".to_string(),
+            b"published_at".to_string(),
             b"score".to_string(),
         ],
         vector[
@@ -57,7 +57,7 @@ public fun register_audit_v2_display(
             b"{data.description}".to_string(),
             b"{data.report_url}".to_string(),
             b"https://example.com/auditor-icon.svg".to_string(),
-            b"{data.publish_date_ms:ts}".to_string(),
+            b"{data.published_at_ms:ts}".to_string(),
             b"{data.score}/100".to_string(),
         ],
         ctx,
@@ -91,14 +91,14 @@ public fun attest_audit_v2(
     subject: ID,
     description: String,
     report_url: String,
-    publish_date_ms: u64,
+    published_at_ms: u64,
     score: u8,
     ctx: &mut TxContext,
 ) {
     registry.attest(
         internal::permit<AuditV2>(),
         subject,
-        AuditV2 { description, report_url, publish_date_ms, score },
+        AuditV2 { description, report_url, published_at_ms, score },
         ctx,
     );
 }

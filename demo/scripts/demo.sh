@@ -67,7 +67,7 @@ echo "registry:    $REGISTRY"
 echo "audit pkg:   $AUDIT (orig $AUDIT_ORIG)"
 echo "admin cap:   $CAP"
 
-# Fixed demo report publication date (ms), surfaced via the publish_date
+# Fixed demo report publication date (ms), surfaced via the published_at
 # convention. A real auditor passes the actual report date.
 PUBDATE=1748736000000   # 2025-06-01
 

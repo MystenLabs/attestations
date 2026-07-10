@@ -14,8 +14,8 @@ public struct Audit has store, drop {
     /// URL of the full audit report (surfaced via the `link` convention).
     report_url: String,
     /// Report publication date (ms since epoch), surfaced via the
-    /// `publish_date` convention.
-    publish_date_ms: u64,
+    /// `published_at` convention.
+    published_at_ms: u64,
 }
 
 /// Single-party authority to *control* this auditor's attestations: whoever
@@ -34,7 +34,7 @@ fun init(ctx: &mut TxContext) {
 /// the full presentation set (name, description, link, image, publish date).
 /// Should be called once shortly after publish; aborts on second call
 /// (V2 enforcement via `display_registry`).
-public fun register_audit_display(
+entry fun register_audit_display(
     registry: &Registry,
     display_registry: &mut DisplayRegistry,
     ctx: &mut TxContext,
@@ -47,14 +47,14 @@ public fun register_audit_display(
             b"description".to_string(),
             b"link".to_string(),
             b"image_url".to_string(),
-            b"publish_date".to_string(),
+            b"published_at".to_string(),
         ],
         vector[
             b"Auditor C audit".to_string(),
             b"{data.description}".to_string(),
             b"{data.report_url}".to_string(),
             b"https://raw.githubusercontent.com/mdgeorge4153/sui-attestation-registry/mdgeorge/attest-positive/demo/auditor_c/icon.svg".to_string(),
-            b"{data.publish_date_ms:ts}".to_string(),
+            b"{data.published_at_ms:ts}".to_string(),
         ],
         ctx,
     );
@@ -68,13 +68,13 @@ public fun attest_audit(
     subject: ID,
     description: String,
     report_url: String,
-    publish_date_ms: u64,
+    published_at_ms: u64,
     ctx: &mut TxContext,
 ) {
     registry.attest(
         internal::permit<Audit>(),
         subject,
-        Audit { description, report_url, publish_date_ms },
+        Audit { description, report_url, published_at_ms },
         ctx,
     );
 }

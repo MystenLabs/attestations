@@ -91,13 +91,13 @@ Publishing a report requires one `attest_audit` call:
 ```sh
 sui client ptb \
   --move-call <your-pkg>::audit::attest_audit \
-    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' <publish-date-ms> \
+    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' <published-at-ms> \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > attest-tx.b64
 ```
 
 `<subject>` is the id of the package (or any object) you reviewed, and
-`<publish-date-ms>` is the publication date in milliseconds since the Unix epoch.
+`<published-at-ms>` is the publication date in milliseconds since the Unix epoch.
 In a `--move-call` target, the package can be its mvr name — e.g. the
 `@your-org/audits` you registered — instead of an address; the object arguments
 (`@<registry>`, `@<admin-cap>`, …) must be addresses.
@@ -123,12 +123,12 @@ sui client ptb \
 To see every attestation you've issued, query the mainnet GraphQL endpoint
 (`https://graphql.mainnet.sui.io/graphql`) for objects of your attestation type.
 For `Audit`, that's
-`<registry-pkg>::attestations::Attestation<<your-pkg>::audit::Audit>`:
+`<registry-pkg>::attestations::Attestation<[your-pkg]::audit::Audit>`:
 
 ```graphql
 query {
   objects(
-    filter: { type: "<registry-pkg>::attestations::Attestation<<your-pkg>::audit::Audit>" }
+    filter: { type: "<registry-pkg>::attestations::Attestation<[your-pkg]::audit::Audit>" }
     # add `after: "<endCursor>"` (from pageInfo) to page through large result sets
   ) {
     pageInfo { hasNextPage endCursor }
@@ -177,4 +177,4 @@ execute through your multisig, as with an attestation transaction.
 
 - Attester-identity model and registry design — the registry repo's `DESIGN.md`.
 - Display field conventions (`name`, `description`, `image_url`, `link`,
-  `publish_date`) — `CONVENTIONS.md`.
+  `published_at`) — `CONVENTIONS.md`.
