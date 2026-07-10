@@ -38,7 +38,15 @@ cleanup() {
         # SIGTERM triggers localnets.py's handler: terminate the localnet, then
         # pg_stop the Postgres it started.
         kill "$LOCAL_PID" 2>/dev/null || true
-        wait "$LOCAL_PID" 2>/dev/null || true
+        # Poll rather than `wait`: inside a signal-triggered EXIT trap, `wait`
+        # returns the moment the signal is delivered rather than when the child
+        # exits. Removing RUN_DIR while localnets.py is still in `pg_ctl stop`
+        # deletes postgres/data out from under it, so the stop fails and the
+        # postmaster is orphaned on :5433 with no data dir.
+        for _ in $(seq 1 40); do
+            kill -0 "$LOCAL_PID" 2>/dev/null || break
+            sleep 0.5
+        done
     fi
     rm -rf "$RUN_DIR" 2>/dev/null || true
 }
