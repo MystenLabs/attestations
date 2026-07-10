@@ -119,8 +119,11 @@ optional step gated by `Permit<T>`.
 SIP-56's recorded attester is `created_by: address` = `tx.sender()` — the
 keypair that signed the transaction.
 
-This PoC's attester (emitted on the `Attested` event) is `T`'s defining
-package address, resolved at mint time via `type_name::original_id<T>()`.
+This PoC's attester is `T`'s original (first-published) package address,
+recovered via `type_name::original_id<T>()` and exposed as `attester_of<T>()`.
+It is not emitted as an event field: `Attested<phantom T>` carries `T` as a type
+parameter, so indexers and subscriptions can filter by attester and schema at
+the type level.
 
 The mechanism: `attest<T>(registry, _: Permit<T>, subject, data, ctx)` is
 gated by `Permit<T>`, and Move restricts minting a `Permit<T>` to `T`'s

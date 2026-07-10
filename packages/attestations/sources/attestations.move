@@ -74,9 +74,8 @@ public struct Revoked<phantom T> has copy, drop {
 /// Create and share a subject's two `Box`es (active + revoked). Idempotent: a
 /// no-op for either box that already exists.
 public fun create_box(registry: &mut Registry, subject: ID) {
-    let registry_id = object::id(registry);
-    registry.claim_box(registry_id, BoxKey { subject, revoked: false });
-    registry.claim_box(registry_id, BoxKey { subject, revoked: true });
+    registry.claim_box(BoxKey { subject, revoked: false });
+    registry.claim_box(BoxKey { subject, revoked: true });
 }
 
 // === Accessors ===
@@ -211,8 +210,9 @@ fun init(ctx: &mut TxContext) {
 
 /// Claim and share one box for `key`, or do nothing if it already exists (so
 /// `create_box` is idempotent).
-fun claim_box(registry: &mut Registry, registry_id: ID, key: BoxKey) {
+fun claim_box(registry: &mut Registry, key: BoxKey) {
     if (derived_object::exists(&registry.id, key)) return;
+    let registry_id = object::id(registry);
     let id = derived_object::claim(&mut registry.id, key);
     transfer::share_object(Box { id, key, registry: registry_id });
 }
