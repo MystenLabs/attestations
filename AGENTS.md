@@ -76,6 +76,11 @@ The frontend lives in a different repo (`MystenLabs/mvr`). The chain side writes
 - Bash runs an `EXIT` trap on `SIGTERM`, but not on `SIGKILL`. Binding a cleanup
   function to `EXIT INT TERM` runs it more than once; bind it to `EXIT` alone and
   let `INT`/`TERM` handlers just `exit`.
+- In bash, `( cmd ) &` sets `$!` to the **subshell's** pid, not `cmd`'s, so
+  `kill "$!"` kills the subshell and orphans `cmd` — its signal handlers never
+  run. Put `exec` before the final command so `$!` is the command itself. (zsh
+  optimises the subshell away, so a quick check in an interactive zsh will
+  wrongly suggest the plain form is fine.)
 - Background jobs need `set -m` for `kill -TERM -$pid` to take the whole process
   group. Otherwise `kill` hits `cargo` or `pnpm` and orphans the child that is
   actually holding the port.

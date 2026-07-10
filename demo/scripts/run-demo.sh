@@ -56,7 +56,11 @@ echo "▶ starting localnet (log: $LOCALNET_LOG)"
 # localnets.py invokes `sui` from PATH; prepend the chosen SUI's dir so a
 # `SUI=/path/to/sui` override is honored. It writes postgres/ + <name>.json
 # into its cwd, so run it from the private scratch dir.
-( cd "$RUN_DIR" && PATH="$(dirname "$SUI"):$PATH" python3 "$REPO_ROOT/demo/scripts/localnets.py" \
+# `exec` matters: without it bash forks a subshell and `$!` is that subshell, not
+# localnets.py. `kill "$LOCAL_PID"` would then kill the subshell, orphaning
+# localnets.py so its SIGTERM handler -- and its `pg_stop` -- never run, leaving
+# Postgres alive on :5433. With `exec`, $! *is* localnets.py.
+( cd "$RUN_DIR" && PATH="$(dirname "$SUI"):$PATH" exec python3 "$REPO_ROOT/demo/scripts/localnets.py" \
     serve --ready "$READY_FILE" --pg-port "$PG_PORT" --faucet-port "$FAUCET_PORT" \
     --network "$NETWORK" ) > "$LOCALNET_LOG" 2>&1 &
 LOCAL_PID=$!
