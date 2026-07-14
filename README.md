@@ -14,33 +14,39 @@ Display-field **conventions** rather than additional Move types.
 ```
 packages/
   attestations/       — the only deployable: Registry, Box, Attestation
-examples/                     — reusable schema patterns for third-party attesters
-  auditor/                    — reference auditor schema (`Audit` + `AuditAdminCap`)
-demo/                         — fixtures that exist only to drive the local demo (see demo/README.md)
-  auditor_a/                  — copy of examples/auditor + an AuditV2 upgrade; TRUSTED in the demo
-  auditor_b/                  — a second copy; NOT trusted (the identity-based-trust demo)
-  dependency_example/         — a subject; dependency of subject_example
-  subject_example/            — the browsed subject (depends on dependency_example)
-  scripts/                    — demo orchestration: run-demo.sh, test-publish.sh, demo.sh
-scripts/                      — reusable CLI ops: create-box, attest-audit, revoke-audit
-CONVENTIONS.md                — Display-field conventions (expires_at, …)
-FUTURE-EXTENSIONS.md          — design memos for surfaces deliberately deferred from v0
+examples/             — reusable schema patterns for third-party attesters
+  auditor/            — reference auditor schema (`Audit` + `AuditAdminCap`)
+demo/                 — fixtures that exist only to drive the local demo (see demo/README.md)
+  auditor_a/          — copy of examples/auditor + an AuditV2 upgrade; TRUSTED in the demo
+  auditor_b/          — a second copy; NOT trusted (the identity-based-trust demo)
+  auditor_c/          — a third copy; a second TRUSTED attester
+  dependency_example/ — a subject; dependency of subject_example
+  subject_example/    — the browsed subject (depends on dependency_example)
+  scripts/            — demo orchestration: run-demo.sh, test-publish.sh, demo.sh
+scripts/              — reusable CLI ops: create-box, attest-audit, revoke-audit
+CONVENTIONS.md        — Display-field conventions (expires_at, …)
+FUTURE-EXTENSIONS.md  — design memos for surfaces deliberately deferred from v0
 ```
 
 ## Concepts
 
 ```
 Registry (shared singleton)
-  └── Box (per subject; active + revoked) ──owns──▶ Attestation<T> (TTO)
+  ├── active box  (a claimed `Box`)   ──owns──▶ un-revoked Attestation<T> (TTO)
+  └── revoked address (no object)     ──owns──▶ revoked Attestation<T>
 ```
 
-A `Registry` is a shared singleton, parent of two `Box`es per subject — an
-*active* box and a *revoked* box. A box's address is
+A `Registry` is a shared singleton, parent of two derived box addresses per
+subject — *active* and *revoked*. Each address is
 `derived_object::derive_address(registry, BoxKey { subject, revoked })` —
 computable off-chain — so consumers enumerate every un-revoked attestation about
 a subject via `getOwnedObjects(active_box, filter={StructType: …})`, with
-server-side type filtering. Each `Attestation<T>` is owned by its Box via
-transfer-to-object.
+server-side type filtering. An attestation carries no status field: it is
+revoked iff it lives at the revoked address.
+
+Only the active address holds a claimed `Box` object, because `revoke` needs a
+`&mut UID` there to `transfer::receive` from. Nothing ever receives *from* the
+revoked address, so it needs no object.
 
 The key design feature is that **the schema package has complete control over
 its attestations.** `attest`, `revoke`, and `register_display` are all gated by
@@ -50,8 +56,8 @@ recorded attester is therefore `T`'s package — bound to the type at compile
 time, not denormalized into a field — and each schema defines its own revocation
 authority (an admin cap, a per-attestation bearer cap, or none at all).
 Revocation moves an attestation from the subject's active box to its revoked
-box. Time-based effectiveness (expiration) and other cross-cutting concerns sit
-in the Display layer per `CONVENTIONS.md` — the registry itself stays minimal.
+address. Time-based effectiveness (expiration) and other cross-cutting concerns
+sit in the Display layer per `CONVENTIONS.md` — the registry itself stays minimal.
 ("Negative" attestations — vulnerability disclosures that propagate from a
 dependency to its dependents — are a planned fast-follow, not in this positive
 MVP.)
@@ -154,8 +160,8 @@ Options:
 
 Off-chain consumers decide whether an attestation is *effective*: it must be
 unexpired per the `expires_at` Display convention (if present). Revocation is
-handled upstream by box membership — a revoked attestation lives in the revoked
-box, not the active one — so it isn't part of that check. See `CONVENTIONS.md`
+handled upstream by box membership — a revoked attestation lives at the revoked
+address, not the active box — so it isn't part of that check. See `CONVENTIONS.md`
 for the conventions and their evaluation rules.
 
 ## Further reading

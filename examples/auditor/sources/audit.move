@@ -80,8 +80,8 @@ public fun attest_audit(
     );
 }
 
-/// Revoke an `Attestation<Audit>` that is owned by `box`, which must be the non-revoked box that owns the attestation indicated by `rcv`.
-/// Gated by the `AuditAdminCap`.
+/// Revoke the `Attestation<Audit>` indicated by `rcv`, which `box` — the
+/// subject's active box — must own. Gated by the `AuditAdminCap`.
 public fun revoke_audit(
     _: &AuditAdminCap,
     box: &mut Box,
