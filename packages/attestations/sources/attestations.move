@@ -215,12 +215,14 @@ fun claim_box(registry: &mut Registry, key: BoxKey) {
 // === Test seam ===
 
 /// A subject's active (`revoked == false`) or revoked (`revoked == true`) box
-/// address. Tests use it to locate either address; production callers don't need
-/// it (off-chain consumers derive box addresses themselves, and `BoxKey` is
-/// module-private so there's nothing to expose on-chain).
+/// address. Takes the registry by `id`, like `attest`, so a caller can derive
+/// either address without holding the shared object. Tests use it to locate
+/// either address; production callers don't need it (off-chain consumers derive
+/// box addresses themselves, and `BoxKey` is module-private so there's nothing
+/// to expose on-chain).
 #[test_only]
-public fun box_address(registry: &Registry, subject: ID, revoked: bool): address {
-    derived_object::derive_address(object::id(registry), BoxKey { subject, revoked })
+public fun box_address(registry: ID, subject: ID, revoked: bool): address {
+    derived_object::derive_address(registry, BoxKey { subject, revoked })
 }
 
 #[test_only]
