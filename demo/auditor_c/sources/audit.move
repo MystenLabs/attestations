@@ -53,7 +53,7 @@ entry fun register_audit_display(
             b"Auditor C audit".to_string(),
             b"{data.description}".to_string(),
             b"{data.report_url}".to_string(),
-            b"https://raw.githubusercontent.com/mdgeorge4153/sui-attestation-registry/mdgeorge/attest-positive/demo/auditor_c/icon.svg".to_string(),
+            b"https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg".to_string(),
             b"{data.published_at_ms:ts}".to_string(),
         ],
         ctx,
