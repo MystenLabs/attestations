@@ -83,9 +83,27 @@ copyable payloads, where the hot potato serves every `T: store`. It would be a
 convenience overload rather than a replacement — worth adding if a schema wants
 it.
 
-The hot potato incurs a `&mut Box` serialization cost because
-`transfer::receive` requires `&mut UID` — concurrent on-chain reads against the
-same subject serialize on the Box object regardless.
+### Immutable borrowing against TTO (a framework change, not a registry one)
+
+Both shapes above pay the same cost: `transfer::receive` requires `&mut UID`, so
+*reading* an attestation on-chain takes a **mutable** borrow of the subject's
+Box, and concurrent reads about one subject serialize on that object.
+
+The more general fix is at the framework level rather than here: let a caller
+obtain a `&T` from a `&Receiving<T>` given a `&UID` — borrowing against a
+transferred-to object without receiving it. (Raised by @amnn in review of PR #1,
+who noted it may be broadly worthwhile beyond this use case.)
+
+That would be strictly better than either shape above. Reads would need only an
+*immutable* borrow of the Box, so the gating calls below wouldn't serialize
+against each other; and the accessor here would collapse to a thin wrapper — no
+hot potato, no discharge discipline, no `EBorrowMismatch`. It also largely
+retires the throughput argument for switching storage models (see below), since
+that argument exists only to escape the `&mut` borrow.
+
+It is out of scope for this package: it changes Sui's transfer-to-object
+primitive, not the registry. It's recorded here because if it lands, the borrow
+machinery above is the wrong thing to build.
 
 ### Concrete use cases that would justify adding
 
@@ -101,4 +119,6 @@ same subject serialize on the Box object regardless.
 For workloads that are high-throughput (many concurrent gating calls per
 subject), the `&mut Box` serialization cost may push toward an alternative
 storage model (DOF) — a tradeoff documented in the off-chain-vs-on-chain
-discussion that drove the PoC's TTO choice.
+discussion that drove the PoC's TTO choice. Immutable borrowing against TTO
+(above) would remove the pressure entirely, and is the better answer if it
+lands.

@@ -329,7 +329,10 @@ path — no "transfer the cap to `@0x0`" anti-pattern needed.
 
 - **On-chain "official" type registry**: type discoverability is
   off-chain via event-stream enumeration.
-- **Publisher-anchored pinning**: curation is consumer-side.
+- **Publisher-anchored pinning in the core**: no `pinned_by`/`unpinned_by`
+  fields, no pin/unpin entrypoints. Author-side pinning is expressible as a
+  `Pin` schema on top (see "Open questions"); consumer-side curation is a
+  trust list at the consumer.
 - **Permissionless attest at the registry layer**: schemas that want
   third-party attesters wrap and gate.
 
@@ -343,7 +346,7 @@ plays out in this PoC:
 | Curated vs. discoverable types | Stayed with curated + on-chain `AttestationType<T>` | Removed; type discoverability off-chain |
 | Scope: minimum viable attestations | Broad agreement on minimal scope | Adopted |
 | Revocation (per-type vs. universal) | Universal via `RevokeCap` | Diverged: policy-free core gated by `Permit<T>`; revocation policy lives in the schema |
-| Pinning: hide vs. highlight | Switched to highlight | Removed entirely (consumer concern) |
+| Pinning: hide vs. highlight | Switched to highlight | Removed from the core; author-side highlighting is expressible as a `Pin { attestation: ID }` schema, consumer-side filtering as a trust list |
 | Modifying attestations | Receive-modify-retransfer via derived addresses | Adopted as receive-and-retransfer: `revoke` moves the attestation between derived addresses, no in-place mutation |
 | Authorization scheme | Sender → `*Cap` pattern | Diverged: `Permit<T>` gating (schema chooses cap / admin / multisig) |
 | Display immutability | Frozen `AttestationType<T>` wraps `DisplayCap` | Append-only Display: `DisplayCap` parked on the Registry, `add_display_field` aborts on an existing field |
@@ -360,10 +363,21 @@ typical mitigation:
   marker objects at first-attest time, leaving the core registry
   unchanged. This is additive and doesn't require the registry to know
   about types.
-- **"We need pinning for explorer UX"**: a separate "trust list" package
-  per consumer surface (wallet, explorer) can express which attestations
-  to surface, keyed on whatever criteria that consumer wants — without
-  involving the package author.
+- **"We need pinning for explorer UX"**: pinning is itself expressible as a
+  schema, with no core change. A `Pin { attestation: ID }` schema, whose
+  `attest` wrapper is gated on the `Publisher` for the subject package, lets an
+  author pin noteworthy attestations about their own package. The pin is an
+  ordinary `Attestation<Pin>` about that package, so it lands in the package's
+  active box and any consumer already enumerating that box sees it for free —
+  and it inherits revocation (unpin) from the core. (Raised by @amnn in review.)
+
+  Consumer-side curation is a *different* need, met differently: a separate
+  "trust list" package per surface (wallet, explorer) expresses which attesters
+  that surface trusts, keyed on whatever criteria it wants, without involving
+  the author. It's worth being precise that these are not substitutes. SIP-56's
+  pinning was for **authors to highlight** attestations *in addition to* the
+  ones a consumer already trusts; a consumer trust list cannot express that,
+  and the `Pin` schema is what does.
 - **"We need permissionless attest"**: schema packages express this in
   the schema by exposing a public constructor and (typically) embedding
   `sender: address` in the data. See Section 3 above for the pattern.
