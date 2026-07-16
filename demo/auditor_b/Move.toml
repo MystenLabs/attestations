@@ -1,0 +1,6 @@
+[package]
+name = "auditor_b"
+edition = "2024"
+
+[dependencies]
+attestations = { local = "../../packages/attestations" }
