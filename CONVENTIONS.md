@@ -39,6 +39,20 @@ consumers.
   via Display V2's `:ts` transform (`{data.published_at_ms:ts}`). It's
   *attester-supplied*, so it can be backdated — a consumer needing a trustworthy
   "first seen" should use the attestation object's on-chain creation time instead.
+- **`kind`** — a coarse category for the claim, so consumers can group or filter
+  attestations *across* attesters. The Move type already identifies a schema
+  exactly, but it can't carry a shared category: the attester **is** `T`'s
+  defining package, so two auditors necessarily define two distinct `Audit`
+  types. `kind` is the cross-attester label the type cannot be. It's a static
+  value in the Display template, so it describes the *schema*, not an individual
+  attestation. It is *attester-asserted*: treat it as a categorization hint for
+  grouping and filtering, never as a security boundary — trust still derives from
+  the attester's identity checked against the consumer's own config, not from
+  what an attestation claims to be.
+
+  Vocabulary so far: **`audit`** — a security review of the subject. Further
+  values are added here as real cases arise; a consumer meeting an unrecognized
+  value should render the attestation ungrouped rather than hide it.
 
 ```move
 fields.push_back(b"link".to_string());
