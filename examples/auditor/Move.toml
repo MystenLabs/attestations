@@ -3,5 +3,7 @@ name = "auditor"
 edition = "2024"
 
 [dependencies]
-# A published auditor points this at the registry's mvr name instead of the local path.
-attestations = { local = "../../packages/attestations" }
+# Depends on the registry by its MVR name. The name resolves on testnet only for
+# now, so this template builds for testnet and (intentionally) not for mainnet,
+# where no registry package is published yet.
+attestations = { r.mvr = "@mysten/attestations" }
