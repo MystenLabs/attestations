@@ -32,7 +32,8 @@ consumers.
 - **`description`** — human-readable summary; may interpolate `data`
   (e.g. `b"Score: {data.score}/100"`).
 - **`image_url`** — an image for the attestation: a grade badge, report
-  thumbnail, etc.
+  thumbnail, etc. Either an `https` URL or an inline `data:image/svg+xml` URI
+  (see *Inline SVG* below).
 - **`link`** — a URL to the full artifact (the audit report, the CVE record).
 - **`published_at`** — publication date of the attested artifact (e.g. an audit
   report), so consumers can show "published on …". Rendered from a `u64` ms field
@@ -45,15 +46,40 @@ fields.push_back(b"link".to_string());
 values.push_back(b"{data.report_url}".to_string());
 ```
 
+**Inline SVG.** `image_url` may be a `data:image/svg+xml` URI rather than a
+hosted image, which lets a schema render a badge derived from the attestation's
+own data — a score, a pass/fail — with nothing to host and no link to rot.
+Display V2's `:url` transform percent-encodes literals and fields in place, so
+the SVG can live in the Display template itself:
+
+```
+data:image/svg+xml,{'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">':url}{data.score:url}{'</svg>':url}
+```
+
+For SVGs whose structure is computed on-chain rather than fixed in the template,
+the `svg` and `codec` packages in [sui-potatoes/app] build one in Move and emit
+it with `to_url()` (percent-encoded) or `to_data_uri()` (base64). None of this is
+specific to attestations — it's the general Sui Display technique, and the
+libraries already exist, so a schema should reuse them rather than hand-roll
+encoding.
+
+[sui-potatoes/app]: https://github.com/sui-potatoes/app
+
 **Security note.** `image_url` and `link` are *attester-supplied content*, so:
 
 - They must never be used to derive **identity** — which attester issued an
   attestation is established by `T`'s defining package (the bytecode-anchored
   attester), not by anything in these fields. A consumer rendering an attester
   badge must source it from its own trust config, never from `image_url`.
-- A consumer should treat the URLs defensively: require `https`, and prefer
-  constraining the host to the attester's known domains so one (whitelisted)
-  attester can't render another's branding or point at unrelated hosts.
+- A consumer should treat the URLs defensively: require `https` (or a
+  `data:image/svg+xml` URI), and prefer constraining the host to the attester's
+  known domains so one (whitelisted) attester can't render another's branding or
+  point at unrelated hosts.
+- An inline SVG is attester-supplied **active content**. Render it in an `<img>`,
+  where scripts do not execute — *never* inline it into the DOM, where a
+  `<script>` or an `onload` attribute inside the SVG would run with the
+  consumer's origin. This is a sharper risk than a bad URL, because here the
+  attester supplies the content itself, not just a pointer to it.
 
 ## Adding a new convention
 
