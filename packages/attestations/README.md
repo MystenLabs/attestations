@@ -1,8 +1,8 @@
 # Attestations
 
 This package provides the onchain core for typed, verifiable attestations on
-Sui: a way for one package to make a durable, public claim about a subject.
-For example, this package can be used to add audit reports to package, KYC data
+Sui: a way for one package to make a durable, public claim about a subject. For
+example, this package can be used to add audit reports to a package, KYC data
 to an account, or even to issue statements about packages on other chains.
 
 The central type is `Attestation<T>`, a permanent object carrying a typed
@@ -30,7 +30,27 @@ party can forge one in their name.
   consumer reads a subject's live attestations with a single type-filtered query
   and no per-object status check, which keeps enumeration cheap for indexers.
 
-## Using it
+## Reading attestations
+
+The layout is built so a consumer can find a subject's attestations in one query,
+with no index to maintain. Every subject's attestations of type `T` live at a
+*box address* you derive yourself from the registry and the subject:
+
+```
+box = derive_address(registry, BoxKey { subject, revoked: false })
+```
+
+List the objects owned by that address, filtered to `Attestation<T>`, and you
+have the subject's live attestations — nothing to check per object. Revoked ones
+aren't there at all; they sit at the sibling address derived with
+`revoked: true`.
+
+Deriving the address means reproducing the `BoxKey` BCS layout and Sui's
+derived-object derivation, so in practice you'll want a small helper rather than
+a shell one-liner. `examples/auditor` shows a worked GraphQL query against the
+attestation type, including how to read the rendered Display fields.
+
+## Creating attestations
 
 You don't attest against this package directly. You write a small schema package
 that defines your claim type `T` and exposes wrappers that mint a `Permit<T>`
@@ -40,3 +60,16 @@ copyable template, with a walkthrough for standing up a new attester end to end.
 The repository also carries the design rationale (see DESIGN.md) and the
 Display-field conventions consumers rely on for cross-cutting behavior like
 expiration (see CONVENTIONS.md).
+
+## Deployments
+
+Testnet:
+
+- registry package —
+  `0x6e0e1141d77448253ab434b008a01259e81c5c31bd1cdac8922a5256da690c09`
+  (defines the `Attestation<T>` and `BoxKey` types)
+- `Registry` object —
+  `0x5a8a789c0385d5e891519612a7d3d8ab36f1d9fc03d63cdabf1cefb3d848b568`
+  (the parent every box address is derived from)
+
+Not yet published on mainnet.
