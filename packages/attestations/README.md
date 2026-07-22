@@ -1,9 +1,9 @@
 # Attestations
 
 This package provides the onchain core for typed, verifiable attestations on
-Sui: a way for one package to make a durable, public claim about a subject — an
-audit of another package, a certification of an object, any statement worth
-recording onchain — that anyone can read back directly from the chain.
+Sui: a way for one package to make a durable, public claim about a subject.
+For example, this package can be used to add audit reports to package, KYC data
+to an account, or even to issue statements about packages on other chains.
 
 The central type is `Attestation<T>`, a permanent object carrying a typed
 payload `T` and the `subject` it describes. The attester recorded on it is the
@@ -16,7 +16,7 @@ party can forge one in their name.
 
 - **`Attestation<T>` is permanent and `key`-only.** No outside caller can
   transfer, wrap, or destroy one; the only ways to move it are this package's
-  `attest` and `revoke`.
+  `attest` and `revoke` functions.
 - **A `Permit<T>` gates every action.** `attest`, `revoke`, and
   `register_display` each require a `Permit<T>`, and Move lets only `T`'s
   defining package mint one. Each schema package therefore sets its own policy
