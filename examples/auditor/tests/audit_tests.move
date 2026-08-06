@@ -13,6 +13,9 @@ const ALICE: address = @0xA11CE;
 fun subject_for(addr: address): ID { addr.to_id() }
 fun description(): String { b"Clean audit — no findings.".to_string() }
 fun report_url(): String { b"https://audits.example.com/r.pdf".to_string() }
+fun report_hash(): Option<String> {
+    option::some(b"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string())
+}
 fun published_at(): u64 { 1_700_000_000_000 }
 
 /// Publish the registry and create `subject`'s active box. Returns the scenario
@@ -53,7 +56,7 @@ fun attest_audit_cross_package() {
     let active = box_id(registry, subject, false);
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(registry, subject, description(), report_url(), published_at(), scenario.ctx());
+    admin.attest_audit(registry, subject, description(), report_url(), report_hash(), published_at(), scenario.ctx());
     transfer::public_transfer(admin, ALICE);
 
     scenario.next_tx(ALICE);
@@ -83,7 +86,7 @@ fun revoke_audit_with_admin_cap() {
     let revoked = box_id(registry, subject, true);
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(registry, subject, description(), report_url(), published_at(), scenario.ctx());
+    admin.attest_audit(registry, subject, description(), report_url(), report_hash(), published_at(), scenario.ctx());
 
     scenario.next_tx(ALICE);
     let id = audit_ids(active)[0];
@@ -98,6 +101,23 @@ fun revoke_audit_with_admin_cap() {
     assert!(audit_ids(active).is_empty());
     assert_eq!(audit_ids(revoked).length(), 1);
     assert_eq!(audit_ids(revoked)[0], id);
+
+    scenario.end();
+}
+
+/// The report digest is optional: attesting with `none` still produces an audit.
+#[test]
+fun attest_audit_without_report_hash() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, registry) = setup_with_box(subject);
+    let active = box_id(registry, subject, false);
+
+    let admin = audit::new_admin_cap_for_testing(scenario.ctx());
+    admin.attest_audit(registry, subject, description(), report_url(), option::none(), published_at(), scenario.ctx());
+    transfer::public_transfer(admin, ALICE);
+
+    scenario.next_tx(ALICE);
+    assert_eq!(audit_ids(active).length(), 1);
 
     scenario.end();
 }

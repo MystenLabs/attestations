@@ -34,6 +34,12 @@ consumers.
 - **`image_url`** — an image for the attestation: a grade badge, report
   thumbnail, etc.
 - **`link`** — a URL to the full artifact (the audit report, the CVE record).
+- **`link_hash`** — a digest of the artifact at `link`, letting a consumer
+  confirm a fetched document matches what was attested. Algorithm-prefixed hex
+  (e.g. `sha256:9f86d0…`), so the algorithm is explicit and swappable. A schema
+  can make it optional (an `Option<String>` field), omitting it for attestations
+  with no recorded digest. Like `link`, it's *attester-supplied* — see the
+  security note.
 - **`published_at`** — publication date of the attested artifact (e.g. an audit
   report), so consumers can show "published on …". Rendered from a `u64` ms field
   via Display V2's `:ts` transform (`{data.published_at_ms:ts}`). It's
@@ -43,9 +49,12 @@ consumers.
 ```move
 fields.push_back(b"link".to_string());
 values.push_back(b"{data.report_url}".to_string());
+fields.push_back(b"link_hash".to_string());
+values.push_back(b"{data.report_hash}".to_string());
 ```
 
-**Security note.** `image_url` and `link` are *attester-supplied content*, so:
+**Security note.** `image_url`, `link`, and `link_hash` are *attester-supplied
+content*, so:
 
 - They must never be used to derive **identity** — which attester issued an
   attestation is established by `T`'s defining package (the bytecode-anchored
@@ -54,6 +63,10 @@ values.push_back(b"{data.report_url}".to_string());
 - A consumer should treat the URLs defensively: require `https`, and prefer
   constraining the host to the attester's known domains so one (whitelisted)
   attester can't render another's branding or point at unrelated hosts.
+- `link_hash` is tamper-evidence *relative to the digest the attester recorded*:
+  a consumer who re-hashes the fetched document can tell it changed since it was
+  attested, but the guarantee is only as strong as trust in that attester and in
+  the recorded digest. It is not, on its own, proof of the document's contents.
 
 ## Adding a new convention
 

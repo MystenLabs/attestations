@@ -16,6 +16,9 @@ public struct Audit has store, drop {
     /// Report publication date (ms since epoch), surfaced via the
     /// `published_at` convention.
     published_at_ms: u64,
+    /// Digest of the report at `report_url`, surfaced via the `link_hash`
+    /// convention (e.g. `sha256:…`). `none` when no digest was recorded.
+    report_hash: Option<String>,
 }
 
 /// Single-party authority to *control* this auditor's attestations: whoever
@@ -46,6 +49,7 @@ entry fun register_audit_display(
             b"name".to_string(),
             b"description".to_string(),
             b"link".to_string(),
+            b"link_hash".to_string(),
             b"image_url".to_string(),
             b"published_at".to_string(),
         ],
@@ -53,6 +57,7 @@ entry fun register_audit_display(
             b"Audit attestation".to_string(),
             b"{data.description}".to_string(),
             b"{data.report_url}".to_string(),
+            b"{data.report_hash}".to_string(),
             b"https://example.com/auditor-icon.svg".to_string(),
             b"{data.published_at_ms:ts}".to_string(),
         ],
@@ -61,13 +66,16 @@ entry fun register_audit_display(
 }
 
 /// Issue an `Attestation<Audit>` about `subject`. Gated by the `AuditAdminCap`,
-/// the single authority over this auditor's attestations.
+/// the single authority over this auditor's attestations. `report_hash`
+/// optionally pins the digest of the report at `report_url` (the `link_hash`
+/// convention); pass `none` to omit it.
 public fun attest_audit(
     _: &AuditAdminCap,
     registry: ID,
     subject: ID,
     description: String,
     report_url: String,
+    report_hash: Option<String>,
     published_at_ms: u64,
     ctx: &mut TxContext,
 ) {
@@ -75,7 +83,7 @@ public fun attest_audit(
         registry,
         internal::permit<Audit>(),
         subject,
-        Audit { description, report_url, published_at_ms },
+        Audit { description, report_url, report_hash, published_at_ms },
         ctx,
     );
 }
