@@ -16,7 +16,7 @@ and conventions stack naturally.
 ## Base effectiveness
 
 Effectiveness is purely structural: an attestation is effective iff it lives in
-its subject's *active* box. `revoke` moves it to the subject's *revoked* box, so
+its subject's *active* box. `revoke` moves it to the subject's *revoked* address, so
 a consumer enumerating the active box only ever sees un-revoked attestations —
 no field to read, no `active` flag. No *current* convention adds further
 effectiveness conditions; the planned `expires_at` (see below) would.

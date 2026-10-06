@@ -172,7 +172,7 @@ public fun register_display<T: store>(
     // schema can later append fields via `add_display_field`, which receives
     // it, adds, and re-parks. No public path here exposes `set`-overwrite,
     // `unset`, or `clear`, so the Display is effectively append-only.
-    transfer::public_transfer(cap, object::id(registry).to_address());
+    transfer::public_transfer(cap, registry.id.to_address());
 }
 
 /// Append fields to an existing `Display<Attestation<T>>`. **Add-only**: aborts
@@ -193,7 +193,7 @@ public fun add_display_field<T: store>(
         assert!(!display.fields().contains(&field), EFieldExists);
         display.set(&cap, field, value);
     });
-    transfer::public_transfer(cap, object::id(registry).to_address());
+    transfer::public_transfer(cap, registry.id.to_address());
 }
 
 // === Internal ===
