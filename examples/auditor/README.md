@@ -152,7 +152,7 @@ upgrade (e.g. `AuditV2`), query each type the same way.
 To withdraw or supersede a report, revoke its attestation with the same
 `AuditAdminCap`. The registry stores each subject's attestations in a *box*, and
 revoking moves the attestation from the subject's *active* box to its *revoked*
-box — consumers stop treating it as live, but it stays on-chain and auditable.
+address — consumers stop treating it as live, but it stays on-chain and auditable.
 
 Revoking works on that box, so it must exist (issuing doesn't need it).
 `create_box` is idempotent, so just run it — no cap needed, so execute it

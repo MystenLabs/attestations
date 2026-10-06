@@ -26,7 +26,7 @@ party can forge one in their name.
   subject's attestations live in per-subject boxes derived from it, at addresses
   anyone can compute offchain from the registry and subject ids.
 - **Revocation is a location, not a flag.** Every subject has an active box and
-  a revoked box, and an attestation's status is simply which one holds it. A
+  a revoked address, and an attestation's status is simply which one owns it. A
   consumer reads a subject's live attestations with a single type-filtered query
   and no per-object status check, which keeps enumeration cheap for indexers.
 

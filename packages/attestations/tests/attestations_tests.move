@@ -141,7 +141,7 @@ fun attest_before_create_box() {
 /// Revocation moves the attestation out of the active box and onto the
 /// subject's revoked address.
 #[test]
-fun revoke_moves_to_revoked_box() {
+fun revoke_moves_to_revoked_address() {
     let subject = subject_for(@0xDEAD);
     let (mut scenario, registry) = setup_with_box(subject);
     let active = box_id(registry, subject, false);
