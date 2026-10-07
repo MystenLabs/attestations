@@ -3,11 +3,6 @@ Pub.*.toml
 build/
 NOTES.md
 
-# Cargo output, and insta snapshots awaiting `cargo insta review`.
-target/
-*.snap.new
-*.pending-snap
-
 ts/node_modules/
 ts/dist/
 

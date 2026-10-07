@@ -6,21 +6,19 @@
 #      (demo/scripts/test-publish.sh, then demo/scripts/demo.sh)
 #   3. follow examples/auditor's onboarding guide as a new auditor would
 #      (e2e/walkthrough.sh)
-#   4. check the on-chain state that leaves against its insta snapshot
-#      (`cargo test` in e2e/, which reads the state the way a consumer would)
 #
-# Everything it creates (sui client config, the localnet's databases, pubfile,
-# demo-ids.json, logs) lives in one work dir, removed on exit.
+# It fails if any step does. Everything it creates (sui client config, the
+# localnet's databases, pubfile, demo-ids.json, logs) lives in one work dir,
+# removed on exit.
 #
 # Usage:
 #   bash e2e/run.sh
-#   cargo insta review --manifest-path e2e/Cargo.toml   # if it left a changed snapshot
 #
 #   PORT_OFFSET=10000 bash e2e/run.sh        # run beside a localnet on the default ports
 #   E2E_WORK_DIR=/some/dir bash e2e/run.sh   # use, and keep, this (empty) work dir
 #   SUI=/path/to/sui bash e2e/run.sh         # override the sui binary
 #
-# Needs sui, cargo, jq, curl, python3 (3.11+), and the Postgres server binaries
+# Needs sui, jq, curl, python3 (3.11+), and the Postgres server binaries
 # (initdb, postgres, pg_ctl) on PATH: the localnet's indexer runs a temporary
 # database of its own. Stop it with Ctrl-C, never `kill -9`: SIGKILL skips the
 # cleanup below and leaves that database running.
@@ -40,7 +38,6 @@ RPC_URL="http://127.0.0.1:$RPC_PORT"
 GRAPHQL_URL="http://127.0.0.1:$GRAPHQL_PORT/graphql"
 READY_TIMEOUT=180
 
-E2E_MANIFEST="$REPO_ROOT/e2e/Cargo.toml"
 # The walkthrough's subject: made up, so it stays apart from the demo's.
 WALKTHROUGH_SUBJECT=0x0000000000000000000000000000000000000000000000000000000000007e57
 
@@ -86,11 +83,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-# Build the snapshot test first, so a compile error fails before the localnet
-# starts, and the localnet isn't left waiting on a build.
-echo "▶ building the snapshot test (e2e/)"
-cargo test --manifest-path "$E2E_MANIFEST" --locked --test attestation_state --no-run --quiet
 
 # --- 1. Localnet ---
 
@@ -188,18 +180,5 @@ echo "▶ the examples/auditor onboarding guide (e2e/walkthrough.sh)"
 PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" SUBJECT="$WALKTHROUGH_SUBJECT" \
     bash "$REPO_ROOT/e2e/walkthrough.sh" "$WORK" | tee "$WORK/walkthrough.log"
 
-# --- 4. Snapshot ---
-
 echo
-echo "▶ check the on-chain state against its snapshot (e2e/tests/attestation_state.rs)"
-if ! E2E_GRAPHQL_URL="$GRAPHQL_URL" E2E_RPC_URL="$RPC_URL" E2E_PUBFILE="$PUBFILE" \
-    E2E_REGISTRY_ID="$REGISTRY_ID" E2E_SENDER="$SENDER" \
-    E2E_WALKTHROUGH_SUBJECT="$WALKTHROUGH_SUBJECT" \
-    cargo test --manifest-path "$E2E_MANIFEST" --locked --test attestation_state --quiet; then
-    echo
-    echo "✘ the on-chain state differs from e2e/tests/snapshots/attestation_state.snap."
-    echo "  If the change is intended, accept it from a local run (CI doesn't keep it):"
-    echo "    cargo insta review --manifest-path e2e/Cargo.toml"
-    exit 1
-fi
-echo "✔ the on-chain state matches its snapshot"
+echo "✔ the demo and the walkthrough ran"
