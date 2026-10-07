@@ -1,0 +1,10 @@
+{
+    "overrides": [
+        {
+            "files": "*.move",
+            "options": {
+                "autoGroupImports": "module"
+            }
+        }
+    ]
+}

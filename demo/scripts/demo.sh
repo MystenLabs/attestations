@@ -111,8 +111,9 @@ echo "▶ revoke the subject's v1 audit (the dependency v1 audit stays active)"
 bash "$OPS/revoke-audit.sh" "$AUDIT" "$CAP" "$SUBJ_BOX" "$SUBJ_AUDIT_V1"
 
 # Hand-off for the MVR Postgres seeder. All values are object ids, so a plain
-# interpolated heredoc is clearer than building the JSON with a tool.
-DEMO_IDS="$REPO_ROOT/demo-ids.json"
+# interpolated heredoc is clearer than building the JSON with a tool. DEMO_IDS
+# overrides the path (e2e/run.sh writes it to its own work dir).
+DEMO_IDS="${DEMO_IDS:-$REPO_ROOT/demo-ids.json}"
 cat > "$DEMO_IDS" <<EOF
 {
   "registryId": "$REGISTRY",

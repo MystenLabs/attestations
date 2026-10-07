@@ -65,8 +65,11 @@ MVP.)
 ## Building and testing
 
 ```bash
-bash scripts/check.sh                          # every package
+bash scripts/check.sh                          # lint, build, and test every package
 bash scripts/check.sh packages/attestations    # just the ones named
+bash scripts/check-format.sh                   # Move formatting; --write to fix
+bash scripts/check-template.sh                 # examples/auditor against this checkout
+bash e2e/run.sh                                # end to end on a fresh localnet
 ```
 
 `check.sh` attempts every package even if one fails, and exits nonzero if any
@@ -76,6 +79,12 @@ env-specific dependencies, so a direct `sui move test` needs a build env:
 ```bash
 cd packages/attestations && sui move test --build-env testnet
 ```
+
+`e2e/run.sh` starts a localnet, publishes every package, runs the demo and the
+`examples/auditor` onboarding guide, and compares the resulting on-chain state
+with the snapshot in `e2e/expected.txt`. When a change to that state is
+intended, update the snapshot with `UPDATE_SNAPSHOT=1 bash e2e/run.sh`. CI runs
+all of these on every pull request.
 
 ## Running the demo
 

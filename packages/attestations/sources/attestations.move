@@ -9,8 +9,7 @@ use sui::event;
 use sui::transfer::Receiving;
 
 #[error(code = 0)]
-const EFieldExists: vector<u8> =
-    b"Display field already exists; add_display_field is append-only";
+const EFieldExists: vector<u8> = b"Display field already exists; add_display_field is append-only";
 
 /// Shared singleton, parent UID for every per-subject `Box`.
 public struct Registry has key {
@@ -122,11 +121,7 @@ public fun attest<T: store>(
 /// *policy* for who may revoke (a bearer cap, an admin cap, a multisig, …)
 /// lives in that module, while the move and `Revoked<T>` event stay uniform
 /// here — the same split as `register_display`.
-public fun revoke<T: store>(
-    box: &mut Box,
-    _: Permit<T>,
-    rcv: Receiving<Attestation<T>>,
-) {
+public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestation<T>>) {
     let a = transfer::receive(&mut box.id, rcv);
     let subject = a.subject;
     let revoked_addr = derived_object::derive_address(

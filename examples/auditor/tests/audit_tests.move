@@ -1,18 +1,21 @@
 #[test_only]
 module auditor::audit_tests;
 
+use attestations::attestations::{Self, Registry, Box, Attestation};
+use auditor::audit::{Self, Audit};
 use std::string::String;
 use std::unit_test::assert_eq;
 use sui::test_scenario::{Self, Scenario};
 use sui::transfer::Receiving;
-use attestations::attestations::{Self, Registry, Box, Attestation};
-use auditor::audit::{Self, Audit};
 
 const ALICE: address = @0xA11CE;
 
 fun subject_for(addr: address): ID { addr.to_id() }
+
 fun description(): String { b"Clean audit — no findings.".to_string() }
+
 fun report_url(): String { b"https://audits.example.com/r.pdf".to_string() }
+
 fun published_at(): u64 { 1_700_000_000_000 }
 
 /// Publish the registry and create `subject`'s active box. Returns the scenario
@@ -53,7 +56,14 @@ fun attest_audit_cross_package() {
     let active = box_id(registry, subject, false);
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(registry, subject, description(), report_url(), published_at(), scenario.ctx());
+    admin.attest_audit(
+        registry,
+        subject,
+        description(),
+        report_url(),
+        published_at(),
+        scenario.ctx(),
+    );
     transfer::public_transfer(admin, ALICE);
 
     scenario.next_tx(ALICE);
@@ -83,7 +93,14 @@ fun revoke_audit_with_admin_cap() {
     let revoked = box_id(registry, subject, true);
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(registry, subject, description(), report_url(), published_at(), scenario.ctx());
+    admin.attest_audit(
+        registry,
+        subject,
+        description(),
+        report_url(),
+        published_at(),
+        scenario.ctx(),
+    );
 
     scenario.next_tx(ALICE);
     let id = audit_ids(active)[0];

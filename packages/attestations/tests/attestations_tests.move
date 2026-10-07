@@ -1,21 +1,16 @@
 #[test_only]
 module attestations::attestations_tests;
 
+use attestations::attestations::{Self, Registry, Box, Attestation};
 use std::unit_test::assert_eq;
 use sui::test_scenario::{Self, Scenario};
 use sui::transfer::Receiving;
-use attestations::attestations::{
-    Self,
-    Registry,
-    Box,
-    Attestation,
-};
 
 const ALICE: address = @0xA11CE;
 
 /// Test-only schema. Defined here so this module is its `Permit<TestSchema>`
 /// minting authority (the registry's `attest`/`revoke` require it).
-public struct TestSchema has store, drop {
+public struct TestSchema has drop, store {
     tag: u8,
 }
 
@@ -94,8 +89,7 @@ fun attest_and_read() {
     let ids = attestation_ids(active);
     assert_eq!(ids.length(), 1);
     scenario.with_shared_by_id!<Box>(active, |box, _| {
-        let rcv: Receiving<Attestation<TestSchema>> =
-            test_scenario::receiving_ticket_by_id(ids[0]);
+        let rcv: Receiving<Attestation<TestSchema>> = test_scenario::receiving_ticket_by_id(ids[0]);
         let a = box.borrow_for_testing(rcv);
         assert_eq!(a.subject(), subject);
         assert_eq!(a.data().tag, 42);
@@ -155,8 +149,7 @@ fun revoke_moves_to_revoked_box() {
     // Revoke from the active box. This module defines `TestSchema`, so it can
     // mint the `Permit<TestSchema>` the registry's `revoke` requires.
     scenario.with_shared_by_id!<Box>(active, |box, _| {
-        let rcv: Receiving<Attestation<TestSchema>> =
-            test_scenario::receiving_ticket_by_id(att_id);
+        let rcv: Receiving<Attestation<TestSchema>> = test_scenario::receiving_ticket_by_id(att_id);
         box.revoke(permit(), rcv);
     });
 

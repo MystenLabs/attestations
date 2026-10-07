@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  move:
+    name: Move packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-sui
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install prettier-move
+        run: npm install -g prettier @mysten/prettier-plugin-move
+
+      - name: Format
+        run: bash scripts/check-format.sh
+
+      - name: Lint, build, and test every package
+        run: bash scripts/check.sh
+
+      - name: Template against this checkout's registry, and the demo's copies of it
+        run: bash scripts/check-template.sh
+
+      - name: Shellcheck
+        run: shellcheck -S warning scripts/*.sh demo/scripts/*.sh e2e/*.sh
+
+  e2e:
+    name: End-to-end on a localnet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-sui
+
+      # The localnet's indexer runs a temporary database of its own. The runner
+      # image ships Postgres, but not on PATH.
+      - name: Put the Postgres server binaries on PATH
+        run: ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1 >> "$GITHUB_PATH"
+
+      - name: Run e2e/run.sh
+        env:
+          E2E_WORK_DIR: ${{ runner.temp }}/e2e
+        run: bash e2e/run.sh
+
+      # Logs, pubfile, demo-ids.json, and this run's snapshot. Not the databases.
+      - name: Upload the work dir
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-work-dir
+          path: |
+            ${{ runner.temp }}/e2e
+            !${{ runner.temp }}/e2e/sui-tmp
+            !${{ runner.temp }}/e2e/client

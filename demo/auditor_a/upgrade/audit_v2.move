@@ -10,16 +10,16 @@
 /// original id should surface `Attestation<AuditV2>` too.
 module auditor_a::audit_v2;
 
+use attestations::attestations::{Registry, Box, Attestation, attest};
+use auditor_a::audit::AuditAdminCap;
 use std::internal;
 use std::string::String;
 use sui::display_registry::{DisplayRegistry, Display, DisplayCap};
 use sui::transfer::Receiving;
-use attestations::attestations::{Registry, Box, Attestation, attest};
-use auditor_a::audit::AuditAdminCap;
 
 /// V2 audit payload: keeps the numeric `score`, plus the description and
 /// publication timestamp the reference schema carries.
-public struct AuditV2 has store, drop {
+public struct AuditV2 has drop, store {
     /// Human-readable summary of the audit, surfaced via the `description`
     /// presentation field.
     description: String,
@@ -83,8 +83,8 @@ public fun add_audit_v2_methodology_display(
     );
 }
 
-/// Issue an AuditV2 attestation about `subject`. Revocable via
-/// `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
+/// Issue an AuditV2 attestation about `subject` and return its `ID`. Revocable
+/// via `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
 public fun attest_audit_v2(
     _: &AuditAdminCap,
     registry: ID,
@@ -94,23 +94,19 @@ public fun attest_audit_v2(
     published_at_ms: u64,
     score: u8,
     ctx: &mut TxContext,
-) {
+): ID {
     attest(
         registry,
         internal::permit<AuditV2>(),
         subject,
         AuditV2 { description, report_url, published_at_ms, score },
         ctx,
-    );
+    )
 }
 
 /// Revoke an `Attestation<AuditV2>`, reusing the auditor_a's `AuditAdminCap`
 /// (one authority covers every audit type this package defines).
-public fun revoke_audit_v2(
-    _: &AuditAdminCap,
-    box: &mut Box,
-    rcv: Receiving<Attestation<AuditV2>>,
-) {
+public fun revoke_audit_v2(_: &AuditAdminCap, box: &mut Box, rcv: Receiving<Attestation<AuditV2>>) {
     box.revoke(internal::permit<AuditV2>(), rcv);
 }
 
@@ -126,19 +122,20 @@ public fun report_url(self: &AuditV2): &String { &self.report_url }
 // registered Display. A trust consumer's Display-gate must filter out
 // `Attestation<InternalNote>` even though its attester package is trusted.
 
-public struct InternalNote has store, drop {
+public struct InternalNote has drop, store {
     text: String,
 }
 
-/// Issue an InternalNote attestation. No Display is registered for
-/// `Attestation<InternalNote>`, so Display-gating consumers ignore it.
-/// Unrevocable — this schema exposes no revoke wrapper (negative test data).
-public fun attest_internal_note(registry: ID, subject: ID, text: String, ctx: &mut TxContext) {
+/// Issue an InternalNote attestation and return its `ID`. No Display is
+/// registered for `Attestation<InternalNote>`, so Display-gating consumers
+/// ignore it. Unrevocable — this schema exposes no revoke wrapper (negative
+/// test data).
+public fun attest_internal_note(registry: ID, subject: ID, text: String, ctx: &mut TxContext): ID {
     attest(
         registry,
         internal::permit<InternalNote>(),
         subject,
         InternalNote { text },
         ctx,
-    );
+    )
 }
