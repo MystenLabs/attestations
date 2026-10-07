@@ -1,0 +1,20 @@
+[package]
+name = "attestations-e2e"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Snapshot of the attestation state that lives on the localnet once e2e/run.sh has run"
+
+[dependencies]
+anyhow = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+# preserve_order: print data fields in struct order and Display fields in the
+# order they were registered, as GraphQL returns them.
+serde_json = { version = "1", features = ["preserve_order"] }
+sui-sdk-types = { version = "0.4", features = ["hash", "serde"] }
+toml = "0.8"
+ureq = { version = "2", features = ["json"] }
+
+[dev-dependencies]
+insta = "1"

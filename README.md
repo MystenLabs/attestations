@@ -80,9 +80,13 @@ env-specific dependencies, so a direct `sui move test` needs a build env:
 cd packages/attestations && sui move test --build-env testnet
 ```
 
-`e2e/run.sh` starts a localnet, publishes every package, and runs the demo and
-the `examples/auditor` onboarding guide on it; it fails if any step does. CI
-runs all of these on every pull request.
+`e2e/run.sh` starts a localnet, publishes every package, runs the demo and the
+`examples/auditor` onboarding guide, and checks the resulting on-chain state
+against an [insta](https://insta.rs) snapshot,
+`e2e/tests/snapshots/attestation_state.snap`. When a change to that state is
+intended, the run leaves the new snapshot for
+`cargo insta review --manifest-path e2e/Cargo.toml`. CI runs all of these on
+every pull request.
 
 ## Running the demo
 

@@ -22,7 +22,7 @@ SUBJECT="${SUBJECT:?SUBJECT is required}"
 WORK="${1:?usage: walkthrough.sh <work-dir>}"
 
 DISPLAY_REGISTRY=0xd    # the system display registry
-PUBDATE=1748736000000   # 2025-06-01, the same fixed date as demo.sh
+PUBDATE=1748736000000   # 2025-06-01, fixed so the snapshot is stable
 
 REGPKG=$(python3 - "$PUBFILE" <<'PY'
 import sys, tomllib
