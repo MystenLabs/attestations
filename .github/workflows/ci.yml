@@ -54,12 +54,23 @@ jobs:
       - name: Put the Postgres server binaries on PATH
         run: ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1 >> "$GITHUB_PATH"
 
+      # The snapshot test in e2e/ is Rust.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: e2e
+
+      - name: Format and lint the snapshot test
+        run: |
+          cargo fmt --manifest-path e2e/Cargo.toml --check
+          cargo clippy --manifest-path e2e/Cargo.toml --all-targets --locked -- -D warnings
+
+      # Fails on a snapshot mismatch: insta sees CI=true and doesn't write one.
       - name: Run e2e/run.sh
         env:
           E2E_WORK_DIR: ${{ runner.temp }}/e2e
         run: bash e2e/run.sh
 
-      # Logs, pubfile, demo-ids.json, and this run's snapshot. Not the databases.
+      # Logs, pubfile, and demo-ids.json. Not the databases.
       - name: Upload the work dir
         if: failure()
         uses: actions/upload-artifact@v4

@@ -1,13 +1,7 @@
-# On-chain state left by e2e/run.sh, read back by e2e/snapshot.py.
-#
-# For each subject: the attestations at its active box and at its revoked
-# address (both derived off-chain from the registry and subject ids), with
-# their data and rendered Display. Then every event the registry emitted, in
-# order. Ids are replaced with names: a package's directory name, `name@vN` for
-# version N of an upgraded package, or a label given by e2e/run.sh.
-#
-# Generated; do not edit. To accept a change: UPDATE_SNAPSHOT=1 bash e2e/run.sh
-
+---
+source: tests/attestation_state.rs
+description: "The attestation state e2e/run.sh leaves on its localnet. For each subject: the attestations at its active box and at its revoked address, both derived off-chain from the registry and subject ids, with their data and rendered Display; then every registry event, in order. Ids are replaced with names: a package's directory name, `name@vN` for version N of an upgraded package, or a label from the test. A line starting with `!!` marks an inconsistency."
+---
 == dependency_example@v1 ==
 events: 2 attested, 0 revoked
 

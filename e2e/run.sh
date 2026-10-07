@@ -6,21 +6,21 @@
 #      (demo/scripts/test-publish.sh, then demo/scripts/demo.sh)
 #   3. follow examples/auditor's onboarding guide as a new auditor would
 #      (e2e/walkthrough.sh)
-#   4. snapshot the on-chain state that leaves (e2e/snapshot.py) and compare it
-#      with e2e/expected.txt
+#   4. check the on-chain state that leaves against its insta snapshot
+#      (`cargo test` in e2e/, which reads the state the way a consumer would)
 #
 # Everything it creates (sui client config, the localnet's databases, pubfile,
 # demo-ids.json, logs) lives in one work dir, removed on exit.
 #
 # Usage:
-#   bash e2e/run.sh                          # compare with e2e/expected.txt
-#   UPDATE_SNAPSHOT=1 bash e2e/run.sh        # write the new state to e2e/expected.txt
+#   bash e2e/run.sh
+#   cargo insta review --manifest-path e2e/Cargo.toml   # if it left a changed snapshot
 #
 #   PORT_OFFSET=10000 bash e2e/run.sh        # run beside a localnet on the default ports
 #   E2E_WORK_DIR=/some/dir bash e2e/run.sh   # use, and keep, this (empty) work dir
 #   SUI=/path/to/sui bash e2e/run.sh         # override the sui binary
 #
-# Needs sui, jq, curl, python3 (3.11+), and the Postgres server binaries
+# Needs sui, cargo, jq, curl, python3 (3.11+), and the Postgres server binaries
 # (initdb, postgres, pg_ctl) on PATH: the localnet's indexer runs a temporary
 # database of its own. Stop it with Ctrl-C, never `kill -9`: SIGKILL skips the
 # cleanup below and leaves that database running.
@@ -40,7 +40,7 @@ RPC_URL="http://127.0.0.1:$RPC_PORT"
 GRAPHQL_URL="http://127.0.0.1:$GRAPHQL_PORT/graphql"
 READY_TIMEOUT=180
 
-EXPECTED="$REPO_ROOT/e2e/expected.txt"
+E2E_MANIFEST="$REPO_ROOT/e2e/Cargo.toml"
 # The walkthrough's subject: made up, so it stays apart from the demo's.
 WALKTHROUGH_SUBJECT=0x0000000000000000000000000000000000000000000000000000000000007e57
 
@@ -86,6 +86,11 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Build the snapshot test first, so a compile error fails before the localnet
+# starts, and the localnet isn't left waiting on a build.
+echo "▶ building the snapshot test (e2e/)"
+cargo test --manifest-path "$E2E_MANIFEST" --locked --test attestation_state --no-run --quiet
 
 # --- 1. Localnet ---
 
@@ -186,24 +191,15 @@ PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" SUBJECT="$WALKTHROUGH_SUBJECT" \
 # --- 4. Snapshot ---
 
 echo
-echo "▶ snapshot the on-chain state (e2e/snapshot.py)"
-# dependency_example@v2 is in the demo precisely to stay unaudited, so no
-# event names it; list it explicitly to check it stays empty.
-python3 "$REPO_ROOT/e2e/snapshot.py" \
-    --graphql "$GRAPHQL_URL" --rpc "$RPC_URL" --pubfile "$PUBFILE" \
-    --registry "$REGISTRY_ID" --sender "$SENDER" \
-    --name "$WALKTHROUGH_SUBJECT=walkthrough_subject" \
-    --subject dependency_example@v2 \
-    >"$WORK/snapshot.txt"
-
-if [[ -n "${UPDATE_SNAPSHOT:-}" ]]; then
-    cp "$WORK/snapshot.txt" "$EXPECTED"
-    echo "✔ wrote e2e/expected.txt"
-elif diff -u --label e2e/expected.txt --label "this run" "$EXPECTED" "$WORK/snapshot.txt"; then
-    echo "✔ the on-chain state matches e2e/expected.txt"
-else
+echo "▶ check the on-chain state against its snapshot (e2e/tests/attestation_state.rs)"
+if ! E2E_GRAPHQL_URL="$GRAPHQL_URL" E2E_RPC_URL="$RPC_URL" E2E_PUBFILE="$PUBFILE" \
+    E2E_REGISTRY_ID="$REGISTRY_ID" E2E_SENDER="$SENDER" \
+    E2E_WALKTHROUGH_SUBJECT="$WALKTHROUGH_SUBJECT" \
+    cargo test --manifest-path "$E2E_MANIFEST" --locked --test attestation_state --quiet; then
     echo
-    echo "✘ the on-chain state differs from e2e/expected.txt (diff above)."
-    echo "  If the change is intended, accept it with: UPDATE_SNAPSHOT=1 bash e2e/run.sh"
+    echo "✘ the on-chain state differs from e2e/tests/snapshots/attestation_state.snap."
+    echo "  If the change is intended, accept it from a local run (CI doesn't keep it):"
+    echo "    cargo insta review --manifest-path e2e/Cargo.toml"
     exit 1
 fi
+echo "✔ the on-chain state matches its snapshot"

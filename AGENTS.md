@@ -21,7 +21,7 @@ conventions in `CONVENTIONS.md`.
 | `examples/auditor` | reference schema plus the new-attester onboarding guide (`README.md`); built and tested standalone, **not** part of the demo |
 | `demo/*` | independently published copies used by the demo, each with its own package identity |
 | `scripts/`, `demo/scripts/` | publish helpers, the local demo stack, and the `check-*.sh` checks |
-| `e2e/` | end-to-end test on a fresh localnet, and the snapshot it compares against (`expected.txt`) |
+| `e2e/` | end-to-end test on a fresh localnet (`run.sh`), and the Rust snapshot test it ends with |
 | `.github/` | CI, which runs every check below on each PR and push to `main` |
 
 `examples/` versus `demo/` is a real distinction, not duplication. The demo needs
@@ -54,11 +54,15 @@ package even if one fails, and exits nonzero if any did.
 `check-template.sh` also builds a copy pointed at this checkout's registry, and
 checks that `demo/auditor_*` are still copies of the template.
 
-`e2e/run.sh` publishes everything, runs the demo and the template's onboarding
-guide, then snapshots the resulting on-chain state as text and diffs it against
-`e2e/expected.txt`. When a change to that state is intended, accept it with
-`UPDATE_SNAPSHOT=1 bash e2e/run.sh` and commit the new snapshot. Beside a
-localnet already on the default ports, add `PORT_OFFSET=10000`.
+`e2e/run.sh` owns the localnet: it publishes everything and runs the demo and
+the template's onboarding guide. Then it runs `cargo test` in `e2e/`, a small
+Rust crate that reads the resulting on-chain state the way a consumer would
+(box addresses derived with `sui-sdk-types`) and checks it, rendered as text,
+against the insta snapshot `e2e/tests/snapshots/attestation_state.snap`. The
+test needs the localnet, so run it through `run.sh`, not alone. When a change to
+that state is intended, the run leaves the new snapshot for `cargo insta review
+--manifest-path e2e/Cargo.toml`; commit the accepted `.snap`. Beside a localnet
+already on the default ports, add `PORT_OFFSET=10000`.
 
 These packages pin env-specific dependencies, so a bare `sui move test` fails
 with "could not determine the correct dependencies"; it needs `--build-env

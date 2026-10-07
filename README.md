@@ -81,10 +81,12 @@ cd packages/attestations && sui move test --build-env testnet
 ```
 
 `e2e/run.sh` starts a localnet, publishes every package, runs the demo and the
-`examples/auditor` onboarding guide, and compares the resulting on-chain state
-with the snapshot in `e2e/expected.txt`. When a change to that state is
-intended, update the snapshot with `UPDATE_SNAPSHOT=1 bash e2e/run.sh`. CI runs
-all of these on every pull request.
+`examples/auditor` onboarding guide, and checks the resulting on-chain state
+against an [insta](https://insta.rs) snapshot,
+`e2e/tests/snapshots/attestation_state.snap`. When a change to that state is
+intended, the run leaves the new snapshot for
+`cargo insta review --manifest-path e2e/Cargo.toml`. CI runs all of these on
+every pull request.
 
 ## Running the demo
 
