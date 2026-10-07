@@ -114,16 +114,19 @@ the ports and removes the scratch dirs without relying on any trap having run.
 
 ### Step-by-step (testnet or manual exploration)
 
-The defaults target a local sui network (`sui start --with-faucet`); to point
-at testnet or another remote network, pass `--rpc <url>` and `--pubfile <path>`.
+The defaults target a local sui network (`sui start --with-faucet
+--with-graphql`); to point at testnet or another remote network, switch your
+sui client to it and set `GRAPHQL` and `PUBFILE` (see below).
 
 Prerequisites:
 
 1. Start a localnet in another shell:
    ```bash
-   sui start --force-regenesis --with-faucet
+   sui start --force-regenesis --with-faucet --with-graphql
    ```
-   This serves gRPC + JSON-RPC on `127.0.0.1:9000` and a faucet on `:9123`.
+   This serves gRPC on `127.0.0.1:9000`, a faucet on `:9123`, and GraphQL on
+   `:9125`, which `demo.sh` reads owned objects from. GraphQL's indexer runs a
+   temporary Postgres, so the Postgres server binaries must be on `PATH`.
 
 2. Switch your sui CLI to it and faucet a bit of gas:
    ```bash
@@ -155,13 +158,13 @@ bash demo/scripts/demo.sh
 revoke-audit): it creates the boxes, issues the audits, revokes two of them, and
 writes `demo-ids.json` for the MVR seeder, printing each step's object ids.
 
-Options:
+Options, as environment variables:
 
-- `--rpc <url>` — override the default localnet gRPC endpoint.
-- `--pubfile <path>` — use a different pubfile (e.g. `Pub.testnet.toml`
+- `GRAPHQL=<url>` — the GraphQL endpoint `demo.sh` reads owned objects from.
+  Default: the localnet's, `http://127.0.0.1:9125/graphql`.
+- `PUBFILE=<path>` — use a different pubfile (e.g. `Pub.testnet.toml`
   if you've published to testnet instead).
-- `--subject <hex-id>` — re-use a specific subject ID. Default: a fresh
-  random ID per run, so `create_box` doesn't collide on re-runs.
+- `DEMO_IDS=<path>` — where to write `demo-ids.json`. Default: the repo root.
 
 ## Effectiveness
 

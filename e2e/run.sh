@@ -170,7 +170,7 @@ fi
 
 echo
 echo "▶ the demo scenario (demo/scripts/demo.sh)"
-RPC="$RPC_URL" PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" DEMO_IDS="$WORK/demo-ids.json" \
+GRAPHQL="$GRAPHQL_URL" PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" DEMO_IDS="$WORK/demo-ids.json" \
     bash "$REPO_ROOT/demo/scripts/demo.sh" | tee "$WORK/demo.log"
 
 # --- 3. Template walkthrough ---
