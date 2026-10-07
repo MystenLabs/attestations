@@ -16,9 +16,11 @@
 #   - revoke the subject's v1 audit
 #   - write demo-ids.json for the MVR seeder
 #
-# Requires: REGISTRY_ID env; packages test-published (Pub.localnet.toml); the
-# active sui client address funded and holding the AuditAdminCap; a GraphQL
-# endpoint for the network (GRAPHQL, default the localnet's :9125).
+# Requires: REGISTRY_ID and REGISTRY_REF_ID env (the shared Registry, which
+# create_box takes, and its frozen RegistryRef, which attest takes); packages
+# test-published (Pub.localnet.toml); the active sui client address funded and
+# holding the AuditAdminCap; a GraphQL endpoint for the network (GRAPHQL,
+# default the localnet's :9125).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -26,6 +28,7 @@ OPS="$REPO_ROOT/scripts"
 GRAPHQL="${GRAPHQL:-http://127.0.0.1:9125/graphql}"
 PUBFILE="${PUBFILE:-$REPO_ROOT/Pub.localnet.toml}"
 REGISTRY="${REGISTRY_ID:?REGISTRY_ID is required (printed by test-publish.sh)}"
+REGISTRY_REF="${REGISTRY_REF_ID:?REGISTRY_REF_ID is required (printed by test-publish.sh)}"
 
 # Read a field (e.g. published-at) from the pubfile's [[published]] block for
 # `<pkg>`. The pubfile is TOML-ish text we just scan per block — python is the
@@ -93,18 +96,18 @@ echo "  dependency v1 active box: $DEP_BOX"
 echo "  subject active box:       $SUBJ_BOX"
 
 echo "▶ attest_audit on dependency v1 (stays active; v2 the latest, left unaudited)"
-DEP_AUDIT=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — no findings" "https://audits.example.com/dependency-v1.pdf" "$PUBDATE")
+DEP_AUDIT=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY_REF" "$DEP_V1" "Dependency audit — no findings" "https://audits.example.com/dependency-v1.pdf" "$PUBDATE")
 echo "  $DEP_AUDIT"
 
 echo "▶ attest_audit_v2 on subject (score 95, the live signal)"
 SUBJ_AUDIT_V2=$(sui client ptb \
-    --move-call "$AUDIT::audit_v2::attest_audit_v2" "@$CAP" "@$REGISTRY" "@$SUBJ" '"Subject audit (v2) — passed"' '"https://audits.example.com/subject-v1.pdf"' "$PUBDATE" 95 \
+    --move-call "$AUDIT::audit_v2::attest_audit_v2" "@$CAP" "@$REGISTRY_REF" "@$SUBJ" '"Subject audit (v2) — passed"' '"https://audits.example.com/subject-v1.pdf"' "$PUBDATE" 95 \
     --json \
   | jq -r 'first(.objectChanges[] | select(.objectType | contains("::AuditV2>")) | .objectId)')
 echo "  $SUBJ_AUDIT_V2"
 
 echo "▶ attest_audit on subject (v1, will be revoked)"
-SUBJ_AUDIT_V1=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY" "$SUBJ" "Subject audit (v1) — superseded" "https://audits.example.com/subject-v1.pdf" "$PUBDATE")
+SUBJ_AUDIT_V1=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY_REF" "$SUBJ" "Subject audit (v1) — superseded" "https://audits.example.com/subject-v1.pdf" "$PUBDATE")
 echo "  $SUBJ_AUDIT_V1"
 
 echo "▶ Auditor B audit (untrusted identity) + attest_internal_note (both filtered out)"
@@ -112,15 +115,15 @@ echo "▶ Auditor B audit (untrusted identity) + attest_internal_note (both filt
 # config — its Audit is filtered out by *identity*, not by type. Its
 # AuditAdminCap is its own distinct type (auditor_b's id).
 AUDITOR_B_CAP=$(find_owned "$ADDR" "$AUDITOR_B::audit::AuditAdminCap")
-bash "$OPS/attest-audit.sh" "$AUDITOR_B" "$AUDITOR_B_CAP" "$REGISTRY" "$SUBJ" "Auditor B review" "https://auditor-b.example/r.pdf" "$PUBDATE" >/dev/null
+bash "$OPS/attest-audit.sh" "$AUDITOR_B" "$AUDITOR_B_CAP" "$REGISTRY_REF" "$SUBJ" "Auditor B review" "https://auditor-b.example/r.pdf" "$PUBDATE" >/dev/null
 sui client ptb \
-    --move-call "$AUDIT::audit_v2::attest_internal_note" "@$REGISTRY" "@$SUBJ" '"no Display registered"' \
+    --move-call "$AUDIT::audit_v2::attest_internal_note" "@$REGISTRY_REF" "@$SUBJ" '"no Display registered"' \
     >/dev/null
 
 echo "▶ Auditor C audits (a second trusted auditor): subject + dependency v1"
 AUDITOR_C_CAP=$(find_owned "$ADDR" "$AUDITOR_C::audit::AuditAdminCap")
-bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$SUBJ" "Subject audit — no critical findings" "https://auditor-c.example/subject.pdf" "$PUBDATE" >/dev/null
-bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — clean" "https://auditor-c.example/dependency.pdf" "$PUBDATE" >/dev/null
+bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY_REF" "$SUBJ" "Subject audit — no critical findings" "https://auditor-c.example/subject.pdf" "$PUBDATE" >/dev/null
+bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY_REF" "$DEP_V1" "Dependency audit — clean" "https://auditor-c.example/dependency.pdf" "$PUBDATE" >/dev/null
 
 echo "▶ revoke the subject's v1 audit (the dependency v1 audit stays active)"
 bash "$OPS/revoke-audit.sh" "$AUDIT" "$CAP" "$SUBJ_BOX" "$SUBJ_AUDIT_V1"

@@ -1,7 +1,7 @@
 #[test_only]
 module attestations::attestations_tests;
 
-use attestations::attestations::{Self, Registry, Box, Attestation};
+use attestations::attestations::{Self, Registry, RegistryRef, Box, Attestation};
 use std::unit_test::assert_eq;
 use sui::test_scenario::{Self, Scenario};
 use sui::transfer::Receiving;
@@ -20,8 +20,9 @@ fun subject_for(addr: address): ID { addr.to_id() }
 fun permit(): std::internal::Permit<TestSchema> { std::internal::permit<TestSchema>() }
 
 /// Publish the registry. Returns the scenario at a fresh tx, plus the registry's
-/// id — all that `attest` and the box-address derivations need, so no test but
-/// this one has to take the shared `Registry`.
+/// id — all that the box-address derivations need, so no test but this one has
+/// to take the shared `Registry`. `attest` reads the id from the frozen
+/// `RegistryRef` instead (see `attest_tag`).
 fun begin(): (Scenario, ID) {
     let mut scenario = test_scenario::begin(ALICE);
     attestations::init_for_testing(scenario.ctx());
@@ -58,6 +59,14 @@ fun attestation_ids(owner: ID): vector<ID> {
     test_scenario::receivable_object_ids_for_owner_id<Attestation<TestSchema>>(owner)
 }
 
+/// Attest `TestSchema { tag }` about `subject` as a schema would: through the
+/// frozen `RegistryRef` that `init` created.
+fun attest_tag(scenario: &mut Scenario, subject: ID, tag: u8) {
+    let registry_ref: RegistryRef = scenario.take_immutable();
+    attestations::attest(&registry_ref, permit(), subject, TestSchema { tag }, scenario.ctx());
+    test_scenario::return_immutable(registry_ref);
+}
+
 #[test]
 fun create_box_is_idempotent() {
     let subject = subject_for(@0xDEAD);
@@ -83,7 +92,7 @@ fun attest_and_read() {
     let (mut scenario, registry) = setup_with_box(subject);
     let active = box_id(registry, subject, false);
 
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 42 }, scenario.ctx());
+    attest_tag(&mut scenario, subject, 42);
 
     scenario.next_tx(ALICE);
     let ids = attestation_ids(active);
@@ -104,8 +113,11 @@ fun reissuance_succeeds() {
     let (mut scenario, registry) = setup_with_box(subject);
     let active = box_id(registry, subject, false);
 
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
+    // Two attestations in one transaction, through the one frozen ref.
+    let registry_ref: RegistryRef = scenario.take_immutable();
+    attestations::attest(&registry_ref, permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
+    attestations::attest(&registry_ref, permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
+    test_scenario::return_immutable(registry_ref);
 
     scenario.next_tx(ALICE);
     let ids = attestation_ids(active);
@@ -123,7 +135,7 @@ fun attest_before_create_box() {
     let (mut scenario, registry) = begin();
 
     // Attest with NO box created yet.
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 9 }, scenario.ctx());
+    attest_tag(&mut scenario, subject, 9);
     // Now create the box at the (already-populated) active address.
     scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
 
@@ -141,7 +153,7 @@ fun revoke_moves_to_revoked_address() {
     let active = box_id(registry, subject, false);
     let revoked = box_id(registry, subject, true);
 
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 7 }, scenario.ctx());
+    attest_tag(&mut scenario, subject, 7);
 
     scenario.next_tx(ALICE);
     let att_id = attestation_ids(active)[0];
@@ -163,6 +175,30 @@ fun revoke_moves_to_revoked_address() {
     assert_eq!(revoked_ids.length(), 1);
     assert_eq!(revoked_ids[0], att_id);
 
+    scenario.end();
+}
+
+/// What the `RegistryRef` guarantees: an attestation always lands at an address
+/// a `Box` can be created at, so it stays revocable even when it was made
+/// before the box existed.
+#[test]
+fun attest_then_create_box_then_revoke() {
+    let subject = subject_for(@0xBEEF);
+    let (mut scenario, registry) = begin();
+    let active = box_id(registry, subject, false);
+
+    attest_tag(&mut scenario, subject, 3);
+    scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
+
+    scenario.next_tx(ALICE);
+    let att_id = attestation_ids(active)[0];
+    scenario.with_shared_by_id!<Box>(active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+
+    scenario.next_tx(ALICE);
+    assert!(attestation_ids(active).is_empty());
+    assert_eq!(attestation_ids(box_id(registry, subject, true)), vector[att_id]);
     scenario.end();
 }
 

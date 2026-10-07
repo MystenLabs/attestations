@@ -9,7 +9,7 @@
 #
 # e2e/run.sh calls this with the sui client already on the localnet and funded.
 #
-# Usage: PUBFILE=... REGISTRY_ID=... SUBJECT=... bash e2e/walkthrough.sh <work-dir>
+# Usage: PUBFILE=... REGISTRY_ID=... REGISTRY_REF_ID=... SUBJECT=... bash e2e/walkthrough.sh <work-dir>
 
 set -euo pipefail
 
@@ -18,6 +18,7 @@ OPS="$REPO_ROOT/scripts"
 SUI="${SUI:-sui}"
 PUBFILE="${PUBFILE:?PUBFILE is required}"
 REGISTRY="${REGISTRY_ID:?REGISTRY_ID is required}"
+REGISTRY_REF="${REGISTRY_REF_ID:?REGISTRY_REF_ID is required}"
 SUBJECT="${SUBJECT:?SUBJECT is required}"
 WORK="${1:?usage: walkthrough.sh <work-dir>}"
 
@@ -54,9 +55,9 @@ echo "▶ register its Display (guide step 2)"
     --args "$REGISTRY" "$DISPLAY_REGISTRY" >/dev/null
 
 echo "▶ publish two reports (guide step 4)"
-KEPT=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
+KEPT=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY_REF" "$SUBJECT" \
     "Walkthrough report — kept" "https://auditor.example/kept.pdf" "$PUBDATE")
-SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
+SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY_REF" "$SUBJECT" \
     "Walkthrough report — revoked" "https://auditor.example/revoked.pdf" "$PUBDATE")
 echo "  kept $KEPT, to revoke $SUPERSEDED"
 
