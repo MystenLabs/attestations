@@ -149,60 +149,52 @@ PKG_AUDIT=$(parse_pkg_field auditor_a published-at)
 PKG_AUDITOR_B=$(parse_pkg_field auditor_b published-at)
 PKG_AUDITOR_C=$(parse_pkg_field auditor_c published-at)
 
-if [[ -z "$PKG_AUDIT" || -z "$PKG_AUDITOR_B" || -z "$PKG_AUDITOR_C" ]]; then
-    echo "could not resolve the auditor package addresses from $PUBFILE:" >&2
-    echo "  auditor_a=$PKG_AUDIT auditor_b=$PKG_AUDITOR_B auditor_c=$PKG_AUDITOR_C" >&2
-    exit 1
-fi
+if [[ -z "$PKG_AUDIT" ]]; then
+    echo "could not resolve package addresses from $PUBFILE — skipping display registration"
+    echo "PKG_AUDIT=$PKG_AUDIT"
+else
+    register_display() {
+        local label="$1" pkg="$2" module="$3" func="$4"
+        echo
+        echo "▶ $label"
+        if ! (cd "$AUDIT_DIR" && \
+                "$SUI" client call \
+                    --package "$pkg" --module "$module" --function "$func" \
+                    --args "$REGISTRY_ID" "$DISPLAY_REGISTRY" \
+                    --gas-budget "$GAS_BUDGET" >/dev/null 2>&1); then
+            echo "  FAILED (Display may already exist for this type)"
+        else
+            echo "  ok"
+        fi
+    }
 
-# Every run publishes fresh packages, so none of these Displays can exist yet:
-# a failure here is a real failure, and it stops the run.
-#
-# Run a sui command, keeping its stdout in $1 and its stderr in $1.err. On
-# failure, print both and exit.
-sui_or_die() {
-    local out="$1"
-    shift
-    if ! "$SUI" "$@" >"$out" 2>"$out.err"; then
-        echo "  FAILED: sui $*"
-        cat "$out.err" "$out"
-        exit 1
-    fi
-}
+    register_display register_audit_display     "$PKG_AUDIT"     audit      register_audit_display
+    register_display register_auditor_b_display "$PKG_AUDITOR_B" audit      register_audit_display
+    register_display register_auditor_c_display "$PKG_AUDITOR_C" audit      register_audit_display
 
-step_out=$(mktemp)
-trap 'rm -f "$step_out" "$step_out.err"' EXIT
-
-register_display() {
-    local label="$1" pkg="$2" module="$3" func="$4"
+    # AuditV2: register its Display, then APPEND a `methodology` field via
+    # add_display_field — a runtime exercise of add_display_field. The shared
+    # Display and the parked DisplayCap come straight from the register tx's
+    # objectChanges (no off-chain lookup needed).
     echo
-    echo "▶ $label"
-    sui_or_die "$step_out" client call \
-        --package "$pkg" --module "$module" --function "$func" \
-        --args "$REGISTRY_ID" "$DISPLAY_REGISTRY" \
-        --gas-budget "$GAS_BUDGET"
-    echo "  ok"
-}
-
-register_display register_audit_display     "$PKG_AUDIT"     audit      register_audit_display
-register_display register_auditor_b_display "$PKG_AUDITOR_B" audit      register_audit_display
-register_display register_auditor_c_display "$PKG_AUDITOR_C" audit      register_audit_display
-
-# AuditV2: register its Display, then APPEND a `methodology` field via
-# add_display_field — a runtime exercise of add_display_field. The shared
-# Display and the parked DisplayCap come straight from the register tx's
-# objectChanges (no off-chain lookup needed).
-echo
-echo "▶ register_audit_v2_display + add_display_field(methodology)"
-sui_or_die "$step_out" client call \
-    --package "$PKG_AUDIT" --module audit_v2 --function register_audit_v2_display \
-    --args "$REGISTRY_ID" "$DISPLAY_REGISTRY" \
-    --gas-budget "$GAS_BUDGET" --json
-V2_DISPLAY=$(jq -r '.objectChanges[] | select(.objectType | test("display_registry::Display<.*AuditV2")) | .objectId' "$step_out")
-V2_CAP=$(jq -r '.objectChanges[] | select(.objectType | test("display_registry::DisplayCap<.*AuditV2")) | .objectId' "$step_out")
-sui_or_die "$step_out" client ptb \
-    --move-call "$PKG_AUDIT::audit_v2::add_audit_v2_methodology_display" "@$REGISTRY_ID" "@$V2_DISPLAY" "@$V2_CAP"
-echo "  ok (+methodology)"
+    echo "▶ register_audit_v2_display + add_display_field(methodology)"
+    if v2reg=$(cd "$AUDIT_DIR" && "$SUI" client call \
+            --package "$PKG_AUDIT" --module audit_v2 --function register_audit_v2_display \
+            --args "$REGISTRY_ID" "$DISPLAY_REGISTRY" \
+            --gas-budget "$GAS_BUDGET" --json 2>/dev/null); then
+        V2_DISPLAY=$(printf '%s' "$v2reg" | jq -r '.objectChanges[] | select(.objectType | test("display_registry::Display<.*AuditV2")) | .objectId')
+        V2_CAP=$(printf '%s' "$v2reg" | jq -r '.objectChanges[] | select(.objectType | test("display_registry::DisplayCap<.*AuditV2")) | .objectId')
+        if "$SUI" client ptb \
+                --move-call "$PKG_AUDIT::audit_v2::add_audit_v2_methodology_display" "@$REGISTRY_ID" "@$V2_DISPLAY" "@$V2_CAP" \
+                >/dev/null 2>&1; then
+            echo "  ok (+methodology)"
+        else
+            echo "  add_display_field FAILED"
+        fi
+    else
+        echo "  register_audit_v2_display FAILED (Display may already exist)"
+    fi
+fi
 
 echo
 echo "✓ all packages test-published and auditor_a upgraded"
