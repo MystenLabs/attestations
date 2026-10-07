@@ -202,6 +202,62 @@ fun attest_then_create_box_then_revoke() {
     scenario.end();
 }
 
+#[
+    test,
+    expected_failure(
+        abort_code = sui::transfer::EUnableToReceiveObject,
+        location = sui::transfer,
+    ),
+]
+fun revoke_from_wrong_box_aborts() {
+    let subject = subject_for(@0xDEAD);
+    let other_subject = subject_for(@0xBEEF);
+    let (mut scenario, registry) = setup_with_box(subject);
+    let active = box_id(registry, subject, false);
+    let other_active = box_id(registry, other_subject, false);
+
+    scenario.with_shared!<Registry>(|reg, _| reg.create_box(other_subject));
+    attest_tag(&mut scenario, subject, 7);
+
+    scenario.next_tx(ALICE);
+    let att_id = attestation_ids(active)[0];
+    scenario.with_shared_by_id!<Box>(other_active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+    scenario.end();
+}
+
+#[
+    test,
+    expected_failure(
+        abort_code = sui::transfer::EUnableToReceiveObject,
+        location = sui::transfer,
+    ),
+]
+fun revoke_twice_aborts() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, registry) = setup_with_box(subject);
+    let active = box_id(registry, subject, false);
+    let revoked = box_id(registry, subject, true);
+
+    attest_tag(&mut scenario, subject, 7);
+
+    scenario.next_tx(ALICE);
+    let att_id = attestation_ids(active)[0];
+    scenario.with_shared_by_id!<Box>(active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+
+    scenario.next_tx(ALICE);
+    assert!(attestation_ids(active).is_empty());
+    assert_eq!(attestation_ids(revoked), vector[att_id]);
+    // Use a fresh ticket, so the failure tests ownership rather than a stale version.
+    scenario.with_shared_by_id!<Box>(active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+    scenario.end();
+}
+
 // `register_display` and `add_display_field` cannot be unit-tested here: they
 // need the system `DisplayRegistry` (shared at `0xd`), and the only way to
 // create one in tests is `display_registry::create_for_testing`, which is
