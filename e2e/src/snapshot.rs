@@ -6,18 +6,19 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::Context;
 use anyhow::Result;
-use anyhow::bail;
+use bimap::BiHashMap;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
 use sui_sdk_types::Address;
+use tokio::time::sleep;
 
+use crate::chain::Attestation;
 use crate::chain::Chain;
 use crate::chain::Event;
 use crate::chain::SubjectState;
@@ -33,7 +34,7 @@ static ATTESTATION_TYPE: LazyLock<Regex> =
 /// Addresses without one are numbered in the order they are first seen.
 #[derive(Default)]
 pub struct Names {
-    labels: HashMap<Address, String>,
+    labels: BiHashMap<Address, String>,
     unnamed: HashMap<Address, String>,
 }
 
@@ -94,14 +95,14 @@ impl Names {
 
     /// The address with this label.
     pub fn address_of(&self, label: &str) -> Result<Address> {
-        match self.labels.iter().find(|(_, l)| *l == label) {
-            Some((address, _)) => Ok(*address),
-            None => bail!("no address is named {label}"),
-        }
+        self.labels
+            .get_by_right(label)
+            .copied()
+            .with_context(|| format!("no address is named {label}"))
     }
 
     pub fn label(&mut self, address: Address) -> String {
-        if let Some(label) = self.labels.get(&address) {
+        if let Some(label) = self.labels.get_by_left(&address) {
             return label.clone();
         }
         let next = self.unnamed.len() + 1;
@@ -131,14 +132,14 @@ impl Names {
 /// Render the attestation state: for each subject in the registry's events,
 /// then each of `extra_subjects`, what is at its active box and revoked
 /// address; then every event, in order.
-pub fn render(
+pub async fn render(
     chain: &Chain,
     names: &mut Names,
     registry: Address,
     registry_pkg: Address,
     extra_subjects: &[Address],
 ) -> Result<String> {
-    let events = chain.events(registry_pkg)?;
+    let events = chain.events(registry_pkg).await?;
     let mut subjects: Vec<Address> = Vec::new();
     for subject in events
         .iter()
@@ -155,13 +156,13 @@ pub fn render(
         // The consistent store that serves owned objects can trail the
         // indexer by a moment, so give a mismatch with the events a few
         // chances before reporting it.
-        let mut state = chain.subject_state(registry, registry_pkg, subject)?;
+        let mut state = chain.subject_state(registry, registry_pkg, subject).await?;
         for _ in 0..20 {
             if consistent(&state, subject, &events) {
                 break;
             }
-            sleep(Duration::from_millis(500));
-            state = chain.subject_state(registry, registry_pkg, subject)?;
+            sleep(Duration::from_millis(500)).await;
+            state = chain.subject_state(registry, registry_pkg, subject).await?;
         }
         blocks.push(render_subject(subject, &state, &events, names)?);
     }
@@ -238,7 +239,7 @@ fn render_subject(
 fn render_location(
     heading: &str,
     object_type: Option<&str>,
-    attestations: &[Value],
+    attestations: &[Attestation],
     subject: Address,
     names: &mut Names,
 ) -> Result<Vec<String>> {
@@ -261,20 +262,20 @@ fn render_location(
 }
 
 fn render_attestation(
-    contents: &Value,
+    attestation: &Attestation,
     subject: Address,
     names: &mut Names,
 ) -> Result<Vec<String>> {
-    let repr = contents["type"]["repr"]
-        .as_str()
-        .context("attestation type")?;
     let schema = &ATTESTATION_TYPE
-        .captures(repr)
-        .with_context(|| format!("not an attestation: {repr}"))?[1];
+        .captures(&attestation.type_repr)
+        .with_context(|| format!("not an attestation: {}", attestation.type_repr))?[1];
     let mut lines = vec![format!("  {}", names.rename(schema))];
 
-    let json = &contents["json"];
-    let field_subject: Address = json["subject"].as_str().context("subject field")?.parse()?;
+    let json = &attestation.json;
+    let field_subject: Address = json["subject"]
+        .as_str()
+        .context("attestation without a subject")?
+        .parse()?;
     if field_subject != subject {
         lines.push(format!(
             "    !! its subject field is {}",
@@ -283,17 +284,15 @@ fn render_attestation(
     }
     lines.extend(render_fields("data", json["data"].as_object(), names));
 
-    let display = &contents["display"];
-    lines.extend(render_fields(
-        "display",
-        display["output"].as_object(),
-        names,
-    ));
-    match &display["errors"] {
-        Value::Null => {}
-        Value::Object(errors) if errors.is_empty() => {}
-        Value::Object(errors) => lines.extend(render_fields("display errors", Some(errors), names)),
-        other => lines.push(format!("    display errors: {other}")),
+    let display = attestation.display.as_ref().and_then(Value::as_object);
+    lines.extend(render_fields("display", display, names));
+    match &attestation.display_errors {
+        None => {}
+        Some(Value::Object(errors)) if errors.is_empty() => {}
+        Some(Value::Object(errors)) => {
+            lines.extend(render_fields("display errors", Some(errors), names))
+        }
+        Some(other) => lines.push(format!("    display errors: {other}")),
     }
     Ok(lines)
 }

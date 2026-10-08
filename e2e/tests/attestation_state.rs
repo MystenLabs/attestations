@@ -23,9 +23,9 @@ names: a package's directory name, `name@vN` for version N of an upgraded \
 package, or a label from the test. A line starting with `!!` marks an \
 inconsistency.";
 
-fn read_state() -> anyhow::Result<String> {
-    let chain = Chain::new(env("E2E_GRAPHQL_URL"));
-    chain.wait_for_transaction(&env("E2E_LAST_DIGEST"))?;
+async fn read_state() -> anyhow::Result<String> {
+    let chain = Chain::new(&env("E2E_GRAPHQL_URL"))?;
+    chain.wait_for_transaction(&env("E2E_LAST_DIGEST")).await?;
 
     let mut names = Names::default();
     let registry_pkg = names.add_packages(Path::new(&env("E2E_PUBFILE")))?;
@@ -39,7 +39,7 @@ fn read_state() -> anyhow::Result<String> {
     // dependency_example@v2 is in the demo precisely to stay unaudited, so no
     // event names it; list it to check it stays empty.
     let extra_subjects = [names.address_of("dependency_example@v2")?];
-    render(&chain, &mut names, registry, registry_pkg, &extra_subjects)
+    render(&chain, &mut names, registry, registry_pkg, &extra_subjects).await
 }
 
 fn env(name: &str) -> String {
@@ -47,9 +47,9 @@ fn env(name: &str) -> String {
         .unwrap_or_else(|_| panic!("{name} is not set; run this test through `bash e2e/run.sh`"))
 }
 
-#[test]
-fn attestation_state() {
-    let state = read_state().unwrap_or_else(|e| panic!("{e:?}"));
+#[tokio::test]
+async fn attestation_state() {
+    let state = read_state().await.unwrap_or_else(|e| panic!("{e:?}"));
     insta::with_settings!({
         description => DESCRIPTION,
         omit_expression => true,

@@ -5,32 +5,38 @@
 //! [`snapshot`] renders it as readable text, which `tests/attestation_state.rs`
 //! checks with insta.
 
-use std::thread::sleep;
+use std::future::Future;
 use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Result;
-use anyhow::bail;
+use anyhow::ensure;
+use tokio::time::sleep;
 
 pub mod chain;
 pub mod snapshot;
 
 /// Call `check` every `interval` until it returns a value, or fail after
 /// `timeout` with an error naming `what` was being waited for.
-pub(crate) fn wait_for<T>(
+pub(crate) async fn wait_for<T, F, Fut>(
     what: &str,
     timeout: Duration,
     interval: Duration,
-    mut check: impl FnMut() -> Result<Option<T>>,
-) -> Result<T> {
+    mut check: F,
+) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<Option<T>>>,
+{
     let deadline = Instant::now() + timeout;
     loop {
-        if let Some(value) = check()? {
+        if let Some(value) = check().await? {
             return Ok(value);
         }
-        if Instant::now() >= deadline {
-            bail!("timed out after {timeout:?} waiting for {what}");
-        }
-        sleep(interval);
+        ensure!(
+            Instant::now() < deadline,
+            "timed out after {timeout:?} waiting for {what}"
+        );
+        sleep(interval).await;
     }
 }
