@@ -21,6 +21,7 @@ conventions in `CONVENTIONS.md`.
 | `examples/auditor` | reference schema plus the new-attester onboarding guide (`README.md`); built and tested standalone, **not** part of the demo |
 | `demo/*` | independently published copies used by the demo, each with its own package identity |
 | `scripts/`, `demo/scripts/` | publish helpers, the local demo stack, and the `check-*.sh` checks |
+| `e2e/` | end-to-end test on a fresh localnet (`run.sh`), and the Rust snapshot test it ends with |
 | `.github/` | CI, which runs every check below on each PR and push to `main` |
 
 `examples/` versus `demo/` is a real distinction, not duplication. The demo needs
@@ -34,6 +35,7 @@ bash scripts/check.sh                          # lint, build, and test every Mov
 bash scripts/check.sh packages/attestations    # just the ones named
 bash scripts/check-format.sh                   # Move formatting; --write to fix
 bash scripts/check-template.sh                 # examples/auditor against this checkout
+bash e2e/run.sh                                # end to end on a fresh localnet
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of these, with the latest `sui` from
@@ -51,6 +53,16 @@ package even if one fails, and exits nonzero if any did.
 *published* package, so `check.sh` alone tests it against that release.
 `check-template.sh` also builds a copy pointed at this checkout's registry, and
 checks that `demo/auditor_*` are still copies of the template.
+
+`e2e/run.sh` owns the localnet: it publishes everything and runs the demo and
+the template's onboarding guide. Then it runs `cargo test` in `e2e/`, a small
+Rust crate that reads the resulting on-chain state the way a consumer would
+(box addresses derived with `sui-sdk-types`) and checks it, rendered as text,
+against the insta snapshot `e2e/tests/snapshots/attestation_state.snap`. The
+test needs the localnet, so run it through `run.sh`, not alone. When a change to
+that state is intended, the run leaves the new snapshot for `cargo insta review
+--manifest-path e2e/Cargo.toml`; commit the accepted `.snap`. Beside a localnet
+already on the default ports, add `PORT_OFFSET=10000`.
 
 These packages pin env-specific dependencies, so a bare `sui move test` fails
 with "could not determine the correct dependencies"; it needs `--build-env
@@ -100,6 +112,9 @@ The frontend lives in a different repo (`MystenLabs/mvr`). The chain side writes
 - Background jobs need `set -m` for `kill -TERM -$pid` to take the whole process
   group. Otherwise `kill` hits `cargo` or `pnpm` and orphans the child that is
   actually holding the port.
+- **Stop `sui start` with `SIGINT`, not `SIGTERM`.** With `--with-graphql` it runs
+  a temporary Postgres for its indexer. `SIGINT` shuts that down too; `SIGTERM`
+  exits and leaves it running.
 - **Reformatting a published module changes its bytecode.** `#[error]` abort
   codes encode the source line of the abort, so any line shift changes them, and
   a rebuild no longer byte-matches the deployed package.

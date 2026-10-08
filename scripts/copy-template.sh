@@ -6,7 +6,7 @@
 # package published on testnet. Built in place, it is therefore tested against
 # that release rather than against the registry in this checkout, and a registry
 # change that breaks the template would go unnoticed until the next publish.
-# check-template.sh builds this copy instead.
+# check-template.sh and the e2e walkthrough build this copy instead.
 #
 # Usage: bash scripts/copy-template.sh <dest-dir>
 

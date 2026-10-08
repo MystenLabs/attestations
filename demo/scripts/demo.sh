@@ -17,12 +17,13 @@
 #   - write demo-ids.json for the MVR seeder
 #
 # Requires: REGISTRY_ID env; packages test-published (Pub.localnet.toml); the
-# active sui client address funded and holding the AuditAdminCap.
+# active sui client address funded and holding the AuditAdminCap; a GraphQL
+# endpoint for the network (GRAPHQL, default the localnet's :9125).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OPS="$REPO_ROOT/scripts"
-RPC="${RPC:-http://127.0.0.1:9000}"
+GRAPHQL="${GRAPHQL:-http://127.0.0.1:9125/graphql}"
 PUBFILE="${PUBFILE:-$REPO_ROOT/Pub.localnet.toml}"
 REGISTRY="${REGISTRY_ID:?REGISTRY_ID is required (printed by test-publish.sh)}"
 
@@ -50,12 +51,26 @@ SUBJ=$(parse_pkg_field subject_example published-at)
 AUDITOR_B=$(parse_pkg_field auditor_b published-at)
 AUDITOR_C=$(parse_pkg_field auditor_c published-at)
 
-# The object id of the single `structtype` object owned by `addr`.
+# The id of the one object of type $2 owned by $1, read through GraphQL. Its
+# indexer can trail the chain by a moment, and these objects were created just
+# before by test-publish.sh, so keep asking for a while.
 find_owned() {
-    curl -s "$RPC" -H 'Content-Type: application/json' -d "{
-      \"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"suix_getOwnedObjects\",
-      \"params\":[\"$1\",{\"filter\":{\"StructType\":\"$2\"}}]}" \
-      | jq -r '.result.data[0].data.objectId // empty'
+    local body id
+    body=$(jq -n --arg owner "$1" --arg type "$2" '{
+        query: "query($owner: SuiAddress!, $type: String!) { address(address: $owner) { objects(filter: { type: $type }) { nodes { address } } } }",
+        variables: { owner: $owner, type: $type }
+    }')
+    for _ in $(seq 1 30); do
+        id=$(curl -s "$GRAPHQL" -H 'Content-Type: application/json' -d "$body" |
+            jq -r '.data.address.objects.nodes[0].address // empty') || id=""
+        if [[ -n "$id" ]]; then
+            echo "$id"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "find_owned: no $2 owned by $1 at $GRAPHQL" >&2
+    return 1
 }
 
 # The AuditAdminCap was transferred to the publisher at publish; find it among
@@ -111,8 +126,9 @@ echo "▶ revoke the subject's v1 audit (the dependency v1 audit stays active)"
 bash "$OPS/revoke-audit.sh" "$AUDIT" "$CAP" "$SUBJ_BOX" "$SUBJ_AUDIT_V1"
 
 # Hand-off for the MVR Postgres seeder. All values are object ids, so a plain
-# interpolated heredoc is clearer than building the JSON with a tool.
-DEMO_IDS="$REPO_ROOT/demo-ids.json"
+# interpolated heredoc is clearer than building the JSON with a tool. DEMO_IDS
+# overrides the path (e2e/run.sh writes it to its own work dir).
+DEMO_IDS="${DEMO_IDS:-$REPO_ROOT/demo-ids.json}"
 cat > "$DEMO_IDS" <<EOF
 {
   "registryId": "$REGISTRY",
