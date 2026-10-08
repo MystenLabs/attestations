@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  move:
+    name: Move packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-sui
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install prettier-move
+        run: npm install -g prettier @mysten/prettier-plugin-move
+
+      - name: Format
+        run: bash scripts/check-format.sh
+
+      - name: Lint, build, and test every package
+        run: bash scripts/check.sh
+
+      - name: Template against this checkout's registry, and the demo's copies of it
+        run: bash scripts/check-template.sh
+
+      - name: Shellcheck
+        run: shellcheck -S warning scripts/*.sh demo/scripts/*.sh

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Build and test the Move packages, with an exit code you can trust.
+# Lint, build, and test the Move packages, with an exit code you can trust.
 #
 # `sui move test` builds the package and runs its tests, so one command covers
-# packages with tests and packages without. Every package is attempted even if
-# an earlier one fails, and the script exits nonzero if any package failed.
+# packages with tests and packages without. It also runs the extra linters, and
+# any lint or compiler warning fails the package. Every package is attempted
+# even if an earlier one fails, and the script exits nonzero if any failed.
 #
 # Usage:
 #   bash scripts/check.sh                                   # every package
@@ -41,7 +42,7 @@ for pkg in "${pkgs[@]}"; do
     fi
 
     out=$(mktemp)
-    if (cd "$REPO_ROOT/$pkg" && "$SUI" move test --build-env "$BUILD_ENV") >"$out" 2>&1; then
+    if (cd "$REPO_ROOT/$pkg" && "$SUI" move test --build-env "$BUILD_ENV" --lint --warnings-are-errors) >"$out" 2>&1; then
         # Surface the test tally when the package has one.
         echo "✔ $pkg $(grep -oE 'Total tests: [0-9]+; passed: [0-9]+' "$out" | tail -1)"
     else

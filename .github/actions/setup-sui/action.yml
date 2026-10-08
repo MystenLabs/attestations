@@ -1,0 +1,25 @@
+name: Set up Sui
+description: Install the latest sui CLI with suiup, and cache Move dependencies.
+
+runs:
+  using: composite
+  steps:
+    # The installer puts suiup in ~/.local/bin, which is already on the
+    # runner's PATH, so nothing needs configuring afterwards.
+    - name: Install suiup and the latest sui
+      shell: bash
+      env:
+        # suiup calls the GitHub API, which rate-limits anonymous requests.
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh
+        suiup install sui
+        sui --version
+
+    # The framework and other git dependencies that the Move.lock files pin.
+    - name: Cache Move dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.move
+        key: move-${{ runner.os }}-${{ hashFiles('**/Move.lock') }}
+        restore-keys: move-${{ runner.os }}-

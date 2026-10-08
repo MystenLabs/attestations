@@ -65,8 +65,10 @@ MVP.)
 ## Building and testing
 
 ```bash
-bash scripts/check.sh                          # every package
+bash scripts/check.sh                          # lint, build, and test every package
 bash scripts/check.sh packages/attestations    # just the ones named
+bash scripts/check-format.sh                   # Move formatting; --write to fix
+bash scripts/check-template.sh                 # examples/auditor against this checkout
 ```
 
 `check.sh` attempts every package even if one fails, and exits nonzero if any

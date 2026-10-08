@@ -1,13 +1,13 @@
 module auditor_b::audit;
 
+use attestations::attestations::{Registry, Box, Attestation, attest};
 use std::internal;
 use std::string::String;
 use sui::display_registry::DisplayRegistry;
 use sui::transfer::Receiving;
-use attestations::attestations::{Registry, Box, Attestation, attest};
 
 /// Audit attestation payload. Lifecycle for `Attestation<Audit>` is controlled by the `AuditAdminCap`
-public struct Audit has store, drop {
+public struct Audit has drop, store {
     /// Human-readable summary of the audit, surfaced via the `description`
     /// presentation field.
     description: String,
@@ -60,8 +60,8 @@ entry fun register_audit_display(
     );
 }
 
-/// Issue an `Attestation<Audit>` about `subject`. Gated by the `AuditAdminCap`,
-/// the single authority over this auditor's attestations.
+/// Issue an `Attestation<Audit>` about `subject` and return its `ID`. Gated by
+/// the `AuditAdminCap`, the single authority over this auditor's attestations.
 public fun attest_audit(
     _: &AuditAdminCap,
     registry: ID,
@@ -70,23 +70,19 @@ public fun attest_audit(
     report_url: String,
     published_at_ms: u64,
     ctx: &mut TxContext,
-) {
+): ID {
     attest(
         registry,
         internal::permit<Audit>(),
         subject,
         Audit { description, report_url, published_at_ms },
         ctx,
-    );
+    )
 }
 
 /// Revoke the `Attestation<Audit>` indicated by `rcv`, which `box` — the
 /// subject's active box — must own. Gated by the `AuditAdminCap`.
-public fun revoke_audit(
-    _: &AuditAdminCap,
-    box: &mut Box,
-    rcv: Receiving<Attestation<Audit>>,
-) {
+public fun revoke_audit(_: &AuditAdminCap, box: &mut Box, rcv: Receiving<Attestation<Audit>>) {
     box.revoke(internal::permit<Audit>(), rcv);
 }
 
