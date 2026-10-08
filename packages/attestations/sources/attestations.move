@@ -9,7 +9,9 @@ use sui::event;
 use sui::transfer::Receiving;
 
 #[error(code = 0)]
-const EFieldExists: vector<u8> = b"Display field already exists; add_display_field is append-only";
+const EFieldExists: vector<u8> = b"Display field already exists; Display fields are append-only";
+#[error(code = 1)]
+const EFieldsValuesMismatch: vector<u8> = b"Display fields and values have different lengths";
 
 /// Shared singleton, parent UID for every per-subject `Box`.
 public struct Registry has key {
@@ -147,6 +149,9 @@ public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestat
 /// Revocation is not a Display field — it's which box owns the attestation.
 /// Schemas adopting cross-cutting conventions (`expires_at`, etc. — see
 /// CONVENTIONS.md) include those fields themselves.
+///
+/// Aborts `EFieldExists` if `fields` names a field twice, and
+/// `EFieldsValuesMismatch` if `fields` and `values` differ in length.
 public fun register_display<T: store>(
     registry: &Registry,
     display_registry: &mut DisplayRegistry,
@@ -160,7 +165,7 @@ public fun register_display<T: store>(
         internal::permit<Attestation<T>>(),
         ctx,
     );
-    fields.zip_do!(values, |field, value| display.set(&cap, field, value));
+    add_fields(&mut display, &cap, fields, values);
     display.share();
 
     // Park the `DisplayCap` on the Registry. It's kept (not destroyed) so the
@@ -172,7 +177,8 @@ public fun register_display<T: store>(
 
 /// Append fields to an existing `Display<Attestation<T>>`. **Add-only**: aborts
 /// `EFieldExists` if a field name is already set, so existing fields can't be
-/// altered or removed. Gated by `Permit<T>` like `register_display`. `rcv`
+/// altered or removed, and `EFieldsValuesMismatch` if `fields` and `values`
+/// differ in length. Gated by `Permit<T>` like `register_display`. `rcv`
 /// receives the `DisplayCap` that `register_display` parked on the Registry
 /// (found off-chain as the lone `DisplayCap<Attestation<T>>` the Registry owns).
 public fun add_display_field<T: store>(
@@ -184,10 +190,7 @@ public fun add_display_field<T: store>(
     values: vector<String>,
 ) {
     let cap = transfer::public_receive(&mut registry.id, rcv);
-    fields.zip_do!(values, |field, value| {
-        assert!(!display.fields().contains(&field), EFieldExists);
-        display.set(&cap, field, value);
-    });
+    add_fields(display, &cap, fields, values);
     transfer::public_transfer(cap, registry.id.to_address());
 }
 
@@ -196,6 +199,22 @@ public fun add_display_field<T: store>(
 /// Create the `Registry` singleton at publish time.
 fun init(ctx: &mut TxContext) {
     transfer::share_object(Registry { id: object::new(ctx) });
+}
+
+/// Set each of `fields` to the matching entry of `values`, never overwriting:
+/// aborts `EFieldExists` if a field is already set, including one named twice
+/// in `fields`, and `EFieldsValuesMismatch` if the two differ in length.
+fun add_fields<T: store>(
+    display: &mut Display<Attestation<T>>,
+    cap: &DisplayCap<Attestation<T>>,
+    fields: vector<String>,
+    values: vector<String>,
+) {
+    assert!(fields.length() == values.length(), EFieldsValuesMismatch);
+    fields.zip_do!(values, |field, value| {
+        assert!(!display.fields().contains(&field), EFieldExists);
+        display.set(cap, field, value);
+    });
 }
 
 /// Claim and share one box for `key`, or do nothing if it already exists (so

@@ -148,10 +148,11 @@ attestation-dynamics authority.
 schema's fields, shares it, and transfers the `DisplayCap` to the Registry's
 address (TTO). The cap is *kept*, not destroyed: `add_display_field<T>` lets the
 schema (gated by `Permit<T>`) receive it, append fields, and re-park it. Adding
-is allowed; altering or removing an existing field is not — `add_display_field`
-aborts on a field name that's already set, and no other public path exposes the
-cap's `set`-overwrite / `unset` / `clear`. So the Display is effectively
-**append-only**: a schema can grow its template over time but can't rewrite it.
+is allowed; altering or removing an existing field is not — both functions abort
+on a field name that's already set, including one named twice in the same call,
+and no other public path exposes the cap's `set`-overwrite / `unset` / `clear`.
+So the Display is effectively **append-only**: a schema can grow its template
+over time but can't rewrite it.
 
 ## Events: phantom T, minimal payload
 
