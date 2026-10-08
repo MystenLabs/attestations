@@ -1,0 +1,4 @@
+fragment FMoveValue on MoveValue {
+    type { repr }
+    json
+}

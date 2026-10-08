@@ -1,20 +1,22 @@
 //! Reading the localnet the way a consumer would: box addresses derived
 //! off-chain, and what they own read through GraphQL.
 
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use anyhow::ensure;
-use regex::Regex;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use serde_json::json;
 use sui_graphql::Client;
+use sui_graphql::GraphQLError;
+use sui_graphql::PageInfo;
 use sui_graphql::graphql_query;
 use sui_graphql_macros::Response;
 use sui_sdk_types::Address;
+use sui_sdk_types::StructTag;
 use sui_sdk_types::TypeTag;
 
 use crate::wait_for;
@@ -23,63 +25,32 @@ use crate::wait_for;
 /// something ever does, reading fails rather than silently truncating.
 const PAGE: u32 = 50;
 
-/// A page of the registry's events.
-const EVENTS: &str = graphql_query!(
-    "query($type: String!, $first: Int, $after: String) {
-      events(first: $first, after: $after, filter: { type: $type }) {
-        pageInfo { hasNextPage endCursor }
-        nodes { contents { type { repr } json } }
-      }
-    }"
-);
-
-/// What is at a subject's active box and revoked address.
-const BOXES: &str = graphql_query!(
-    "query($active: SuiAddress!, $revoked: SuiAddress!, $type: String!, $first: Int) {
-      activeObject: object(address: $active) { asMoveObject { ...TypeRepr } }
-      revokedObject: object(address: $revoked) { asMoveObject { ...TypeRepr } }
-      active: address(address: $active) { ...Attestations }
-      revoked: address(address: $revoked) { ...Attestations }
-    }
-
-    fragment TypeRepr on MoveObject {
-      contents { type { repr } }
-    }
-
-    fragment Attestations on Address {
-      objects(first: $first, filter: { type: $type }) {
-        pageInfo { hasNextPage }
-        nodes {
-          ...TypeRepr
-          contents { json display { output errors } }
-        }
-      }
-    }"
-);
-
-/// `<registry package>::attestations::<Attested or Revoked><T>`.
-static EVENT_TYPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^0x[0-9a-f]+::attestations::(\w+)<(.+)>$").unwrap());
-
 /// An `Attested<T>` or `Revoked<T>` event from the registry.
 pub struct Event {
     /// `Attested` or `Revoked`.
     pub kind: String,
-    /// `T`, with full addresses.
-    pub schema: String,
+    /// `T`.
+    pub schema: TypeTag,
     pub subject: Address,
+}
+
+/// A Move value: its type, and its fields as JSON.
+#[derive(Response)]
+#[response(root_type = "MoveValue")]
+pub struct MoveValue {
+    #[field(path = "type.repr")]
+    pub type_: TypeTag,
+    #[field(path = "json")]
+    pub json: Value,
 }
 
 /// An attestation, as GraphQL returns it.
 #[derive(Response)]
 #[response(root_type = "MoveObject")]
 pub struct Attestation {
-    /// `<registry package>::attestations::Attestation<T>`.
-    #[field(path = "contents.type.repr")]
-    pub type_repr: String,
-    /// Its fields: `id`, `subject`, and `data`.
-    #[field(path = "contents.json")]
-    pub json: Value,
+    /// `Attestation<T>`, with its `id`, `subject`, and `data`.
+    #[field(path = "contents")]
+    pub contents: MoveValue,
     /// Its rendered Display, if `T` has one.
     #[field(path = "contents.display?.output?")]
     pub display: Option<Value>,
@@ -95,48 +66,24 @@ pub struct SubjectState {
     /// The attestations at the revoked address.
     pub revoked: Vec<Attestation>,
     /// The type of the object at the active box address, if there is one.
-    pub active_object: Option<String>,
+    pub active_object: Option<TypeTag>,
     /// The type of the object at the revoked address, if there is one.
-    pub revoked_object: Option<String>,
+    pub revoked_object: Option<TypeTag>,
 }
 
 pub struct Chain {
     client: Client,
 }
 
-#[derive(Response)]
-struct EventsPage {
-    #[field(path = "events.pageInfo.hasNextPage")]
-    has_next_page: bool,
-    #[field(path = "events.pageInfo.endCursor?")]
-    end_cursor: Option<String>,
-    #[field(path = "events.nodes[]")]
-    nodes: Vec<EventNode>,
-}
-
-#[derive(Response)]
-#[response(root_type = "Event")]
-struct EventNode {
-    #[field(path = "contents.type.repr")]
-    type_repr: String,
-    #[field(path = "contents.json")]
-    json: Value,
-}
-
-#[derive(Response)]
-struct Boxes {
-    #[field(path = "activeObject:object?.asMoveObject?.contents.type.repr")]
-    active_object: Option<String>,
-    #[field(path = "revokedObject:object?.asMoveObject?.contents.type.repr")]
-    revoked_object: Option<String>,
-    #[field(path = "active:address.objects.pageInfo.hasNextPage")]
-    active_has_more: bool,
-    #[field(path = "active:address.objects.nodes[]")]
-    active: Vec<Attestation>,
-    #[field(path = "revoked:address.objects.pageInfo.hasNextPage")]
-    revoked_has_more: bool,
-    #[field(path = "revoked:address.objects.nodes[]")]
-    revoked: Vec<Attestation>,
+impl Attestation {
+    /// `T`, from the attestation's type `Attestation<T>`.
+    pub fn schema(&self) -> Result<&TypeTag> {
+        let type_ = &self.contents.type_;
+        struct_tag(type_)?
+            .type_params()
+            .first()
+            .with_context(|| format!("not an attestation: {type_}"))
+    }
 }
 
 impl Chain {
@@ -179,33 +126,53 @@ impl Chain {
 
     /// The registry's events, in the order they were emitted.
     pub async fn events(&self, registry_pkg: Address) -> Result<Vec<Event>> {
-        let event_type = format!("{registry_pkg}::attestations");
+        const EVENTS: &str = graphql_query!(
+            "query AttestationEvents($type: String!, $first: Int, $after: String) {
+                events(first: $first, after: $after, filter: { type: $type }) {
+                    pageInfo { ...FPageInfo }
+                    nodes { contents { ...FMoveValue } }
+                }
+            }",
+            @"fragments/FMoveValue.graphql",
+            @"fragments/FPageInfo.graphql",
+        );
+
+        #[derive(Response)]
+        struct Response {
+            #[field(path = "events.pageInfo")]
+            page_info: PageInfo,
+            #[field(path = "events.nodes[].contents")]
+            contents: Vec<MoveValue>,
+        }
+
         let mut events = Vec::new();
-        let mut after: Option<String> = None;
+        let mut after = None;
         loop {
-            let page: EventsPage = self
-                .query(
-                    EVENTS,
-                    json!({ "type": event_type, "first": PAGE, "after": after }),
-                )
-                .await?;
-            for node in page.nodes {
-                let captures = EVENT_TYPE
-                    .captures(&node.type_repr)
-                    .with_context(|| format!("unexpected event type {}", node.type_repr))?;
-                let subject = node.json["subject"]
+            let variables = json!({
+                "type": format!("{registry_pkg}::attestations"),
+                "first": PAGE,
+                "after": after,
+            });
+            let page: Response = self.query(EVENTS, variables).await?;
+            for value in page.contents {
+                let tag = struct_tag(&value.type_)?;
+                let schema = tag
+                    .type_params()
+                    .first()
+                    .with_context(|| format!("event without a schema: {}", value.type_))?;
+                let subject = value.json["subject"]
                     .as_str()
                     .context("event without a subject")?;
                 events.push(Event {
-                    kind: captures[1].to_string(),
-                    schema: captures[2].to_string(),
+                    kind: tag.name().to_string(),
+                    schema: schema.clone(),
                     subject: subject.parse()?,
                 });
             }
-            if !page.has_next_page {
+            if !page.page_info.has_next_page {
                 return Ok(events);
             }
-            after = page.end_cursor;
+            after = page.page_info.end_cursor;
         }
     }
 
@@ -216,33 +183,66 @@ impl Chain {
         registry_pkg: Address,
         subject: Address,
     ) -> Result<SubjectState> {
-        let boxes: Boxes = self
-            .query(
-                BOXES,
-                json!({
-                    "active": box_address(registry, registry_pkg, subject, false)?.to_string(),
-                    "revoked": box_address(registry, registry_pkg, subject, true)?.to_string(),
-                    "type": format!("{registry_pkg}::attestations::Attestation"),
-                    "first": PAGE,
-                }),
-            )
-            .await?;
+        const BOXES: &str = graphql_query!(
+            "query SubjectBoxes(
+                $active: SuiAddress!,
+                $revoked: SuiAddress!,
+                $type: String!,
+                $first: Int,
+            ) {
+                activeObject: object(address: $active) {
+                    asMoveObject { contents { ...FMoveValue } }
+                }
+                revokedObject: object(address: $revoked) {
+                    asMoveObject { contents { ...FMoveValue } }
+                }
+                active: address(address: $active) { ...FAttestations }
+                revoked: address(address: $revoked) { ...FAttestations }
+            }",
+            @"fragments/FAttestations.graphql",
+            @"fragments/FMoveValue.graphql",
+            @"fragments/FPageInfo.graphql",
+        );
+
+        #[derive(Response)]
+        struct Response {
+            #[field(path = "activeObject:object?.asMoveObject?.contents")]
+            active_object: Option<MoveValue>,
+            #[field(path = "revokedObject:object?.asMoveObject?.contents")]
+            revoked_object: Option<MoveValue>,
+            #[field(path = "active:address.objects.pageInfo")]
+            active_page: PageInfo,
+            #[field(path = "active:address.objects.nodes[]")]
+            active: Vec<Attestation>,
+            #[field(path = "revoked:address.objects.pageInfo")]
+            revoked_page: PageInfo,
+            #[field(path = "revoked:address.objects.nodes[]")]
+            revoked: Vec<Attestation>,
+        }
+
+        let variables = json!({
+            "active": box_address(registry, registry_pkg, subject, false)?,
+            "revoked": box_address(registry, registry_pkg, subject, true)?,
+            "type": format!("{registry_pkg}::attestations::Attestation"),
+            "first": PAGE,
+        });
+        let boxes: Response = self.query(BOXES, variables).await?;
         ensure!(
-            !boxes.active_has_more && !boxes.revoked_has_more,
+            !boxes.active_page.has_next_page && !boxes.revoked_page.has_next_page,
             "more than {PAGE} attestations at one address; the e2e needs paging"
         );
         Ok(SubjectState {
             active: boxes.active,
             revoked: boxes.revoked,
-            active_object: boxes.active_object,
-            revoked_object: boxes.revoked_object,
+            active_object: boxes.active_object.map(|value| value.type_),
+            revoked_object: boxes.revoked_object.map(|value| value.type_),
         })
     }
 
     /// Run a query and return its data, failing on any GraphQL error.
     async fn query<T: DeserializeOwned>(&self, query: &str, variables: Value) -> Result<T> {
         let response = self.client.query::<T>(query, variables).await?;
-        let errors: Vec<&str> = response.errors().iter().map(|e| e.message()).collect();
+        let errors: Vec<String> = response.errors().iter().map(graphql_error).collect();
         ensure!(errors.is_empty(), "GraphQL error: {}", errors.join("; "));
         response.into_data().context("GraphQL returned no data")
     }
@@ -263,4 +263,20 @@ pub fn box_address(
     let mut key = subject.as_bytes().to_vec();
     key.push(u8::from(revoked));
     Ok(registry.derive_object_id(&key_type, &key))
+}
+
+/// The struct tag of `type_`, which must be a struct type.
+fn struct_tag(type_: &TypeTag) -> Result<&StructTag> {
+    match type_ {
+        TypeTag::Struct(tag) => Ok(tag),
+        other => bail!("expected a struct type, got {other}"),
+    }
+}
+
+/// One GraphQL error as `CODE: message`, or just the message if it has no code.
+fn graphql_error(error: &GraphQLError) -> String {
+    match error.code() {
+        Some(code) => format!("{code}: {}", error.message()),
+        None => error.message().to_string(),
+    }
 }

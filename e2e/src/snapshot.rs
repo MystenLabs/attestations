@@ -16,6 +16,7 @@ use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
 use sui_sdk_types::Address;
+use sui_sdk_types::TypeTag;
 use tokio::time::sleep;
 
 use crate::chain::Attestation;
@@ -25,10 +26,6 @@ use crate::chain::SubjectState;
 
 /// A full-length address anywhere in a string.
 static ADDRESS: LazyLock<Regex> = LazyLock::new(|| Regex::new("0x[0-9a-f]{64}").unwrap());
-
-/// `<registry package>::attestations::Attestation<T>`.
-static ATTESTATION_TYPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^0x[0-9a-f]+::attestations::Attestation<(.+)>$").unwrap());
 
 /// Readable labels for addresses: packages, the registry, made-up subjects.
 /// Addresses without one are numbered in the order they are first seen.
@@ -220,7 +217,7 @@ fn render_subject(
 
     lines.extend(render_location(
         "active box",
-        state.active_object.as_deref(),
+        state.active_object.as_ref(),
         &state.active,
         subject,
         names,
@@ -228,7 +225,7 @@ fn render_subject(
     lines.push(String::new());
     lines.extend(render_location(
         "revoked address",
-        state.revoked_object.as_deref(),
+        state.revoked_object.as_ref(),
         &state.revoked,
         subject,
         names,
@@ -238,13 +235,13 @@ fn render_subject(
 
 fn render_location(
     heading: &str,
-    object_type: Option<&str>,
+    object_type: Option<&TypeTag>,
     attestations: &[Attestation],
     subject: Address,
     names: &mut Names,
 ) -> Result<Vec<String>> {
     let found = match object_type {
-        Some(object_type) => format!("{} object", names.rename(object_type)),
+        Some(object_type) => format!("{} object", names.rename(&object_type.to_string())),
         None => "no object".to_string(),
     };
     let mut lines = vec![format!("{heading} ({found})")];
@@ -266,12 +263,10 @@ fn render_attestation(
     subject: Address,
     names: &mut Names,
 ) -> Result<Vec<String>> {
-    let schema = &ATTESTATION_TYPE
-        .captures(&attestation.type_repr)
-        .with_context(|| format!("not an attestation: {}", attestation.type_repr))?[1];
-    let mut lines = vec![format!("  {}", names.rename(schema))];
+    let schema = attestation.schema()?.to_string();
+    let mut lines = vec![format!("  {}", names.rename(&schema))];
 
-    let json = &attestation.json;
+    let json = &attestation.contents.json;
     let field_subject: Address = json["subject"]
         .as_str()
         .context("attestation without a subject")?
@@ -322,7 +317,7 @@ fn render_events(events: &[Event], names: &mut Names) -> Vec<String> {
         .map(|e| {
             (
                 e.kind.as_str(),
-                names.rename(&e.schema),
+                names.rename(&e.schema.to_string()),
                 names.label(e.subject),
             )
         })
