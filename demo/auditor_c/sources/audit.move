@@ -1,6 +1,6 @@
 module auditor_c::audit;
 
-use attestations::attestations::{Registry, Box, Attestation, attest};
+use attestations::attestations::{Registry, RegistryRef, Box, Attestation, attest};
 use std::internal;
 use std::string::String;
 use sui::display_registry::DisplayRegistry;
@@ -64,7 +64,7 @@ entry fun register_audit_display(
 /// the `AuditAdminCap`, the single authority over this auditor's attestations.
 public fun attest_audit(
     _: &AuditAdminCap,
-    registry: ID,
+    registry: &RegistryRef,
     subject: ID,
     description: String,
     report_url: String,

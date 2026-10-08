@@ -43,7 +43,7 @@ Registry (shared singleton)
   └── BoxKey{subject, revoked:true}  → revoked address → owns revoked Attestation<T> (no object)
 ```
 
-- **`Registry`** is a `key`-only shared singleton, created in `init`; all per-subject box addresses are derived from its UID.
+- **`Registry`** is a `key`-only shared singleton, created in `init`; all per-subject box addresses are derived from its UID. `init` also freezes a **`RegistryRef`** holding its id, which `attest` takes (see "Revocation" below).
 - **`Box`** is `key`-only and per-subject. `create_box` claims the *active* box
   and is idempotent (a no-op if it already exists, so a revoker can always call
   it before `revoke`). Each box address is
@@ -113,19 +113,20 @@ permit, not a bare path to forge `Attestation<T>` from a stray `T` value.
 ## Revocation: `Permit<T>`-gated, policy in the schema
 
 ```move
-public fun attest<T: store>(registry: ID, _: Permit<T>, subject: ID, data, ctx): ID
+public fun attest<T: store>(registry: &RegistryRef, _: Permit<T>, subject: ID, data, ctx): ID
 public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestation<T>>)
 ```
 
 `attest` transfers the attestation to `subject`'s active box *address* (derived
 from the registry id) and returns its `ID` — the one piece a schema can't
 otherwise recover, since the object goes straight to the box — so a schema can
-bind a bearer cap to it, log it, or ignore it. It takes the registry by `id`,
-not by reference: it only needs the id to derive the address, and passing the
-shared `Registry` object would force the transaction through consensus, whereas
-by id `attest` has no shared inputs and can run on the owned-object fast path. It
-takes no `Box`, so the box need not exist yet; `create_box` is only a
-prerequisite for `revoke`. `revoke` receives the attestation and moves it to the
+bind a bearer cap to it, log it, or ignore it. It takes the registry's frozen
+`RegistryRef`, which holds the registry's id, the only thing it needs to derive
+the address. An earlier version took a bare id, so a wrong one sent the
+attestation to an address no `Box` can ever be claimed at, where it could never
+be revoked; the ref, created once in `init`, always holds the real registry's
+id. `attest` also takes no `Box`, so the box need not exist yet; `create_box`
+is only a prerequisite for `revoke`. `revoke` receives the attestation and moves it to the
 revoked address (derived from the Box's stored `registry`), emitting `Revoked<T>`.
 
 The move and event stay uniform here; the *authority* does not. Because `revoke`

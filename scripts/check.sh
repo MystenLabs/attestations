@@ -7,7 +7,7 @@
 # even if an earlier one fails, and the script exits nonzero if any failed.
 #
 # Usage:
-#   bash scripts/check.sh                                   # every package
+#   bash scripts/check.sh                                   # every package but the template
 #   bash scripts/check.sh packages/attestations             # just these
 #
 #   SUI=/path/to/sui bash scripts/check.sh                  # override the binary
@@ -26,11 +26,15 @@ pkgs=()
 if (( $# )); then
     pkgs=("$@")
 else
+    # Not examples/auditor: it depends on the *published* registry by its MVR
+    # name, so in place it can't build against registry changes that aren't
+    # published yet. check-template.sh builds and tests it against this
+    # checkout's registry instead. Name it explicitly to build it as published.
     # No `mapfile`: macOS ships bash 3.2, which lacks it.
     while IFS= read -r pkg; do
         pkgs+=("$pkg")
-    done < <(cd "$REPO_ROOT" && find . -name Move.toml -not -path '*/build/*' |
-        sed 's|^\./||; s|/Move.toml$||' | sort)
+    done < <(cd "$REPO_ROOT" && find . -name Move.toml -not -path '*/build/*' \
+        -not -path './examples/auditor/*' | sed 's|^\./||; s|/Move.toml$||' | sort)
 fi
 
 failed=()

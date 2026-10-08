@@ -10,7 +10,7 @@
 /// original id should surface `Attestation<AuditV2>` too.
 module auditor_a::audit_v2;
 
-use attestations::attestations::{Registry, Box, Attestation, attest};
+use attestations::attestations::{Registry, RegistryRef, Box, Attestation, attest};
 use auditor_a::audit::AuditAdminCap;
 use std::internal;
 use std::string::String;
@@ -87,7 +87,7 @@ public fun add_audit_v2_methodology_display(
 /// via `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
 public fun attest_audit_v2(
     _: &AuditAdminCap,
-    registry: ID,
+    registry: &RegistryRef,
     subject: ID,
     description: String,
     report_url: String,
@@ -130,7 +130,12 @@ public struct InternalNote has drop, store {
 /// registered for `Attestation<InternalNote>`, so Display-gating consumers
 /// ignore it. Unrevocable — this schema exposes no revoke wrapper (negative
 /// test data).
-public fun attest_internal_note(registry: ID, subject: ID, text: String, ctx: &mut TxContext): ID {
+public fun attest_internal_note(
+    registry: &RegistryRef,
+    subject: ID,
+    text: String,
+    ctx: &mut TxContext,
+): ID {
     attest(
         registry,
         internal::permit<InternalNote>(),

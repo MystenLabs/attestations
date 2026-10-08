@@ -24,7 +24,9 @@ party can forge one in their name.
   multisig, or no one at all.
 - **A shared `Registry`** is created when the package is published. Each
   subject's attestations live in per-subject boxes derived from it, at addresses
-  anyone can compute offchain from the registry and subject ids.
+  anyone can compute offchain from the registry and subject ids. Publishing also
+  freezes a `RegistryRef` pointing at it, which `attest` takes, so every
+  attestation lands in this registry's boxes, where it can be revoked.
 - **Revocation is a location, not a flag.** Every subject has an active box and
   a revoked address, and an attestation's status is simply which one owns it. A
   consumer reads a subject's live attestations with a single type-filtered query
@@ -71,5 +73,8 @@ Testnet:
 - `Registry` object —
   `0x5a8a789c0385d5e891519612a7d3d8ab36f1d9fc03d63cdabf1cefb3d848b568`
   (the parent every box address is derived from)
+
+This testnet deployment predates `RegistryRef`: its `attest` still takes the
+registry's bare id. It will be replaced by a fresh publish.
 
 Not yet published on mainnet.

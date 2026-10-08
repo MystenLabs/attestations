@@ -172,21 +172,24 @@ echo
 echo "▶ publish every package (demo/scripts/test-publish.sh)"
 bash "$REPO_ROOT/demo/scripts/test-publish.sh" "$PUBFILE" | tee "$WORK/publish.log"
 REGISTRY_ID=$(awk '/^Registry shared object:/ {print $NF; exit}' "$WORK/publish.log")
-if [[ -z "$REGISTRY_ID" ]]; then
-    echo "✘ test-publish.sh didn't print the Registry id"
+REGISTRY_REF_ID=$(awk '/^RegistryRef frozen object:/ {print $NF; exit}' "$WORK/publish.log")
+if [[ -z "$REGISTRY_ID" || -z "$REGISTRY_REF_ID" ]]; then
+    echo "✘ test-publish.sh didn't print the Registry and RegistryRef ids"
     exit 1
 fi
 
 echo
 echo "▶ the demo scenario (demo/scripts/demo.sh)"
-GRAPHQL="$GRAPHQL_URL" PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" DEMO_IDS="$WORK/demo-ids.json" \
+GRAPHQL="$GRAPHQL_URL" PUBFILE="$PUBFILE" DEMO_IDS="$WORK/demo-ids.json" \
+    REGISTRY_ID="$REGISTRY_ID" REGISTRY_REF_ID="$REGISTRY_REF_ID" \
     bash "$REPO_ROOT/demo/scripts/demo.sh" | tee "$WORK/demo.log"
 
 # --- 3. Template walkthrough ---
 
 echo
 echo "▶ the examples/auditor onboarding guide (e2e/walkthrough.sh)"
-PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" SUBJECT="$WALKTHROUGH_SUBJECT" \
+PUBFILE="$PUBFILE" SUBJECT="$WALKTHROUGH_SUBJECT" \
+    REGISTRY_ID="$REGISTRY_ID" REGISTRY_REF_ID="$REGISTRY_REF_ID" \
     bash "$REPO_ROOT/e2e/walkthrough.sh" "$WORK" | tee "$WORK/walkthrough.log"
 
 # --- 4. Snapshot ---

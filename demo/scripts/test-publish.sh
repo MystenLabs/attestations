@@ -17,8 +17,8 @@
 # sources/ only for the upgrade step, so AuditV2's defining package id is the
 # *upgraded* id — exercising the schema-evolution path.
 #
-# Prints the Registry shared-object id so it can be exported as REGISTRY_ID
-# for the demo.
+# Prints the ids of the shared Registry and of its frozen RegistryRef, so they
+# can be exported as REGISTRY_ID and REGISTRY_REF_ID for the demo.
 #
 # Usage:
 #   ./demo/scripts/test-publish.sh                  # uses Pub.localnet.toml at repo root
@@ -64,6 +64,7 @@ fi
 echo "shared pubfile: $PUBFILE"
 
 REGISTRY_ID=""
+REGISTRY_REF_ID=""
 
 # Read a field ("published-at", "original-id", "upgrade-capability") from the
 # pubfile [[published]] block whose source dir matches the given package name.
@@ -97,11 +98,15 @@ for pkg in packages/attestations demo/auditor_a demo/auditor_b demo/auditor_c de
     # --json writes the result object to stdout (build logs go to stderr), so jq
     # reads it straight from json_out.
     if [[ "$name" == "attestations" ]]; then
-        REGISTRY_ID=$(jq -r '
-            first(.objectChanges[]?
-                | select(.type == "created"
-                    and (.objectType // "" | endswith("::attestations::Registry")))
-                | .objectId) // empty' "$json_out")
+        # init creates the shared Registry and the frozen RegistryRef.
+        created_id() {
+            jq -r --arg type "$1" '
+                first(.objectChanges[]?
+                    | select(.type == "created" and (.objectType // "" | endswith($type)))
+                    | .objectId) // empty' "$json_out"
+        }
+        REGISTRY_ID=$(created_id "::attestations::Registry")
+        REGISTRY_REF_ID=$(created_id "::attestations::RegistryRef")
     fi
     rm -f "$json_out" "$err_out"
 done
@@ -206,14 +211,16 @@ echo "  ok (+methodology)"
 
 echo
 echo "✓ all packages test-published and auditor_a upgraded"
-if [[ -n "$REGISTRY_ID" ]]; then
+if [[ -n "$REGISTRY_ID" && -n "$REGISTRY_REF_ID" ]]; then
     echo
     echo "Registry shared object: $REGISTRY_ID"
+    echo "RegistryRef frozen object: $REGISTRY_REF_ID"
     echo
     echo "Run the demo with:"
-    echo "  REGISTRY_ID=$REGISTRY_ID bash demo/scripts/demo.sh"
+    echo "  REGISTRY_ID=$REGISTRY_ID REGISTRY_REF_ID=$REGISTRY_REF_ID bash demo/scripts/demo.sh"
 else
     echo
-    echo "(couldn't extract Registry id from the attestations package's publish output;"
-    echo " look it up via the publish tx digest, then export it as REGISTRY_ID.)"
+    echo "(couldn't extract the Registry and RegistryRef ids from the attestations"
+    echo " package's publish output; look them up via the publish tx digest, then"
+    echo " export them as REGISTRY_ID and REGISTRY_REF_ID.)"
 fi

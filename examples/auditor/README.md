@@ -57,8 +57,9 @@ From the output, note three ids you'll need:
   Objects*, matched by the object types ending `::audit::AuditAdminCap` and
   `0x2::package::UpgradeCap`. Both were sent to you; custody them in step 3.
 
-You'll also need the registry's shared **`Registry` object id** from its mainnet
-deployment — used in the call below and every time you issue.
+You'll also need two object ids from the registry's mainnet deployment: the
+shared **`Registry`**, used in the call below and to create boxes, and the
+frozen **`RegistryRef`**, which every report you issue goes through.
 
 Register your Display once so `Attestation<Audit>` objects render with your name,
 icon, and report links (`0xd` is the system display registry):
@@ -91,7 +92,7 @@ Publishing a report requires one `attest_audit` call:
 ```sh
 sui client ptb \
   --move-call <your-pkg>::audit::attest_audit \
-    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' <published-at-ms> \
+    @<admin-cap> @<registry-ref> @<subject> '"<description>"' '"<report-url>"' <published-at-ms> \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > attest-tx.b64
 ```
@@ -100,7 +101,7 @@ sui client ptb \
 `<published-at-ms>` is the publication date in milliseconds since the Unix epoch.
 In a `--move-call` target, the package can be its mvr name — e.g. the
 `@your-org/audits` you registered — instead of an address; the other arguments
-(`@<registry>`, `@<admin-cap>`, `@<subject>`, …) must be addresses.
+(`@<registry-ref>`, `@<admin-cap>`, `@<subject>`, …) must be addresses.
 
 This writes the unsigned transaction bytes to `attest-tx.b64`, with the multisig
 as sender; hand that file to your multisig to sign to threshold and execute (for
@@ -112,8 +113,8 @@ transaction size limits, in which case you can break the PTB into multiple PTBs)
 
 ```sh
 sui client ptb \
-  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectA> '"..."' '"..."' <date> \
-  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectB> '"..."' '"..."' <date> \
+  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry-ref> @<subjectA> '"..."' '"..."' <date> \
+  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry-ref> @<subjectB> '"..."' '"..."' <date> \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > backfill-tx.b64
 ```

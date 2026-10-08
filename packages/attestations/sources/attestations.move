@@ -16,6 +16,14 @@ public struct Registry has key {
     id: UID,
 }
 
+/// Frozen at publish beside the shared `Registry`, holding its id; `init`
+/// creates the only one. `attest` takes this rather than a bare `ID`, so it can
+/// only send to the real registry's boxes, where `revoke` can reach them.
+public struct RegistryRef has key {
+    id: UID,
+    registry: ID,
+}
+
 /// Derived-address key for one of a subject's two box addresses. `revoked: false`
 /// keys the active address, `revoked: true` the revoked address. Off-chain
 /// consumers compute either address from `(registry_id, subject_id)`; on-chain,
@@ -84,10 +92,8 @@ public fun attester_of<T>(): address { type_name::original_id<T>() }
 
 // === Attest / Revoke ===
 
-/// Attest about `subject` with `data`. Takes the registry by `id`, not by
-/// reference: `attest` only needs the id to derive the box address, and passing
-/// the shared `Registry` object would force the transaction through consensus —
-/// by id it has no shared inputs and can run on the owned-object fast path.
+/// Attest about `subject` with `data`. Takes the frozen `RegistryRef`, which
+/// holds the real registry's id, the only thing `attest` needs from it.
 /// Gated by `Permit<T>`: only `T`'s defining module can mint one, so authority
 /// to attest lives in that module — uniform with `revoke` and `register_display`.
 /// The attestation goes to `subject`'s *active* box address
@@ -96,7 +102,7 @@ public fun attester_of<T>(): address { type_name::original_id<T>() }
 /// one piece a schema can't otherwise recover since the object goes straight to
 /// the box.
 public fun attest<T: store>(
-    registry: ID,
+    registry: &RegistryRef,
     _: Permit<T>,
     subject: ID,
     data: T,
@@ -105,7 +111,7 @@ public fun attest<T: store>(
     let attestation = Attestation<T> { id: object::new(ctx), subject, data };
     let attestation_id = object::id(&attestation);
     let box_addr = derived_object::derive_address(
-        registry,
+        registry.registry,
         BoxKey { subject, revoked: false },
     );
     event::emit(Attested<T> { subject });
@@ -193,9 +199,15 @@ public fun add_display_field<T: store>(
 
 // === Internal ===
 
-/// Create the `Registry` singleton at publish time.
+/// Create the shared `Registry` singleton at publish time, and freeze the
+/// `RegistryRef` that points `attest` at it.
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Registry { id: object::new(ctx) });
+    let registry = Registry { id: object::new(ctx) };
+    transfer::freeze_object(RegistryRef {
+        id: object::new(ctx),
+        registry: object::id(&registry),
+    });
+    transfer::share_object(registry);
 }
 
 /// Claim and share one box for `key`, or do nothing if it already exists (so
@@ -210,8 +222,8 @@ fun claim_box(registry: &mut Registry, key: BoxKey) {
 // === Test seam ===
 
 /// A subject's active (`revoked == false`) or revoked (`revoked == true`) box
-/// address. Takes the registry by `id`, like `attest`, so a caller can derive
-/// either address without holding the shared object. Tests use it to locate
+/// address. Takes the registry by `id`, so a caller can derive either address
+/// without holding the shared object or the `RegistryRef`. Tests use it to locate
 /// either address; production callers don't need it (off-chain consumers derive
 /// box addresses themselves, and `BoxKey` is module-private so there's nothing
 /// to expose on-chain).

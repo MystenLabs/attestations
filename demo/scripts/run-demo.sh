@@ -84,14 +84,16 @@ printf '%s\n' "$SETUP_OUT"
 
 REGISTRY_ID=$(printf '%s\n' "$SETUP_OUT" \
     | awk '/^Registry shared object:/ {print $NF; exit}')
-if [[ -z "$REGISTRY_ID" ]]; then
-    echo "could not extract REGISTRY_ID from test-publish output" >&2
+REGISTRY_REF_ID=$(printf '%s\n' "$SETUP_OUT" \
+    | awk '/^RegistryRef frozen object:/ {print $NF; exit}')
+if [[ -z "$REGISTRY_ID" || -z "$REGISTRY_REF_ID" ]]; then
+    echo "could not extract REGISTRY_ID and REGISTRY_REF_ID from test-publish output" >&2
     exit 1
 fi
 
 echo
 echo "▶ demo"
-REGISTRY_ID="$REGISTRY_ID" bash "$REPO_ROOT/demo/scripts/demo.sh"
+REGISTRY_ID="$REGISTRY_ID" REGISTRY_REF_ID="$REGISTRY_REF_ID" bash "$REPO_ROOT/demo/scripts/demo.sh"
 
 echo
 echo "▶ done"
