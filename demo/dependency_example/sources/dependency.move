@@ -4,5 +4,5 @@
 module dependency_example::dependency;
 
 /// Returns the package's notional version. Exists only so the module has
-/// some content; the demo cares about the package id, not this value.
+/// some content; the demo only uses the package id.
 public fun version(): u64 { 1 }
