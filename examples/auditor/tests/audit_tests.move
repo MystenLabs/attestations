@@ -76,8 +76,8 @@ fun attest_audit_cross_package() {
         box.put_back_for_testing(a);
     });
 
-    // attester_of<Audit> must resolve to auditor's package address, not
-    // attestations's.
+    // attester_of<Audit> resolves to auditor's package address, so it differs
+    // from attester_of<Registry>.
     assert!(attestations::attester_of<Audit>() != attestations::attester_of<Registry>());
 
     scenario.end();

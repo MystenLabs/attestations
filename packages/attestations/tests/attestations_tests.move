@@ -157,8 +157,8 @@ fun revoke_moves_to_revoked_address() {
     scenario.next_tx(ALICE);
     assert!(attestation_ids(active).is_empty());
 
-    // No Box object exists at the revoked address; the attestation is simply
-    // owned by that address, which is what off-chain consumers read.
+    // The revoked address owns the attestation directly, with no Box object
+    // there, and off-chain consumers read that ownership.
     let revoked_ids = attestation_ids(revoked);
     assert_eq!(revoked_ids.length(), 1);
     assert_eq!(revoked_ids[0], att_id);

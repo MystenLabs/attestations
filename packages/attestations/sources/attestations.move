@@ -27,10 +27,10 @@ public struct BoxKey has copy, drop, store {
 
 /// The claimed, shared object at a subject's *active* box address, created by
 /// `create_box`. It exists only so `revoke` has a `&mut UID` to `receive` an
-/// attestation from. There is no revoked-box object: `revoke` transfers to the
-/// revoked *address* (nobody receives from it), and an attestation's status *is*
-/// which address owns it. Carries its parent `registry` id so `revoke` can
-/// derive the revoked sibling address.
+/// attestation from. The revoked side is a bare address that `revoke` transfers
+/// to and nothing receives from. An attestation's status is the address that
+/// owns it. Carries its parent `registry` id so `revoke` can derive the revoked
+/// sibling address.
 public struct Box has key {
     id: UID,
     registry: ID,
@@ -42,8 +42,8 @@ public struct Box has key {
 /// **Lifecycle invariant**: `key`-only (no `store`, no `drop`). No public
 /// function returns one by value, so external callers can't transfer, wrap, or
 /// drop it. Its only dispositions are `attest` (into the active box) and
-/// `revoke` (from the active box to the revoked address); its status is which
-/// address owns it, not a field here.
+/// `revoke` (from the active box to the revoked address); its status is the
+/// address that owns it.
 public struct Attestation<T: store> has key {
     id: UID,
     subject: ID,
@@ -63,8 +63,8 @@ public struct Revoked<phantom T> has copy, drop {
 // === Setup ===
 
 /// Create and share a subject's active `Box`, the object `revoke` receives from.
-/// Idempotent: a no-op if it already exists. There is no revoked box to create —
-/// `revoke` transfers to the revoked address, which needs no object.
+/// Idempotent: a no-op if it already exists. The revoked address is a plain
+/// transfer target and needs no box.
 public fun create_box(registry: &mut Registry, subject: ID) {
     registry.claim_box(BoxKey { subject, revoked: false });
 }
@@ -84,17 +84,17 @@ public fun attester_of<T>(): address { type_name::original_id<T>() }
 
 // === Attest / Revoke ===
 
-/// Attest about `subject` with `data`. Takes the registry by `id`, not by
-/// reference: `attest` only needs the id to derive the box address, and passing
-/// the shared `Registry` object would force the transaction through consensus —
-/// by id it has no shared inputs and can run on the owned-object fast path.
-/// Gated by `Permit<T>`: only `T`'s defining module can mint one, so authority
-/// to attest lives in that module — uniform with `revoke` and `register_display`.
+/// Attest about `subject` with `data`. Takes the registry by `id`, which is all
+/// `attest` needs to derive the box address, so the transaction has no shared
+/// inputs and can run on the owned-object fast path.
 /// The attestation goes to `subject`'s *active* box address
-/// (`derive_address(registry, {subject, false})`); the box need not exist yet —
-/// only `revoke` needs the `Box` object. Returns the new attestation's `ID`, the
-/// one piece a schema can't otherwise recover since the object goes straight to
-/// the box.
+/// (`derive_address(registry, {subject, false})`); the box need not exist yet,
+/// since only `revoke` needs the `Box` object. Returns the new attestation's
+/// `ID`, which a schema can't otherwise recover because the object goes straight
+/// to the box.
+///
+/// Gated by `Permit<T>`: only `T`'s defining module can mint one, so authority
+/// to attest lives in that module, as it does for `revoke` and `register_display`.
 public fun attest<T: store>(
     registry: ID,
     _: Permit<T>,
@@ -114,8 +114,8 @@ public fun attest<T: store>(
 }
 
 /// Revoke the attestation referenced by `rcv`: receive it from the active
-/// `box` and move it to the subject's revoked address. Terminal — there is no
-/// un-revoke. `rcv` alone identifies which attestation.
+/// `box` and move it to the subject's revoked address. Revocation is permanent.
+/// `rcv` alone identifies which attestation.
 ///
 /// Gated by `Permit<T>`: only `T`'s defining module can mint one, so the
 /// *policy* for who may revoke (a bearer cap, an admin cap, a multisig, …)
@@ -144,7 +144,7 @@ public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestat
 /// - Top-level: `{subject}`, `{data}`
 /// - T's own fields are under `{data.<field>}` (e.g. `{data.description}`)
 ///
-/// Revocation is not a Display field — it's which box owns the attestation.
+/// An attestation's revocation status is the address that owns it.
 /// Schemas adopting cross-cutting conventions (`expires_at`, etc. — see
 /// CONVENTIONS.md) include those fields themselves.
 public fun register_display<T: store>(
@@ -163,10 +163,10 @@ public fun register_display<T: store>(
     fields.zip_do!(values, |field, value| display.set(&cap, field, value));
     display.share();
 
-    // Park the `DisplayCap` on the Registry. It's kept (not destroyed) so the
-    // schema can later append fields via `add_display_field`, which receives
-    // it, adds, and re-parks. No public path here exposes `set`-overwrite,
-    // `unset`, or `clear`, so the Display is effectively append-only.
+    // Park the `DisplayCap` on the Registry, so the schema can later append
+    // fields via `add_display_field`, which receives it, adds, and re-parks.
+    // No public path here exposes `set`-overwrite, `unset`, or `clear`, so the
+    // Display is effectively append-only.
     transfer::public_transfer(cap, registry.id.to_address());
 }
 
