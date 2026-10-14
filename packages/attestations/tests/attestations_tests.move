@@ -205,7 +205,6 @@ fun attest_then_create_box_then_revoke() {
     test,
     expected_failure(
         abort_code = sui::transfer::EUnableToReceiveObject,
-        location = sui::transfer,
     ),
 ]
 fun revoke_from_wrong_box_aborts() {
