@@ -1,7 +1,7 @@
 #[test_only]
 module attestations::attestations_tests;
 
-use attestations::attestations::{Self, Registry, RegistryRef, Box, Attestation};
+use attestations::attestations::{Self, Registry, Box, Attestation};
 use std::unit_test::assert_eq;
 use sui::test_scenario::{Self, Scenario};
 use sui::transfer::Receiving;
@@ -19,10 +19,8 @@ fun subject_for(addr: address): ID { addr.to_id() }
 /// A `Permit<TestSchema>` — only this module (TestSchema's definer) can mint it.
 fun permit(): std::internal::Permit<TestSchema> { std::internal::permit<TestSchema>() }
 
-/// Publish the registry. Returns the scenario at a fresh tx, plus the registry's
-/// id — all that the box-address derivations need, so no test but this one has
-/// to take the shared `Registry`. `attest` reads the id from the frozen
-/// `RegistryRef` instead (see `attest_tag`).
+/// Publish the registry. Return the scenario at a fresh transaction and the
+/// registry's id for box-address derivations.
 fun begin(): (Scenario, ID) {
     let mut scenario = test_scenario::begin(ALICE);
     attestations::init_for_testing(scenario.ctx());
@@ -59,12 +57,11 @@ fun attestation_ids(owner: ID): vector<ID> {
     test_scenario::receivable_object_ids_for_owner_id<Attestation<TestSchema>>(owner)
 }
 
-/// Attest `TestSchema { tag }` about `subject` as a schema would: through the
-/// frozen `RegistryRef` that `init` created.
+/// Issue a test attestation through the shared registry.
 fun attest_tag(scenario: &mut Scenario, subject: ID, tag: u8) {
-    let registry_ref: RegistryRef = scenario.take_immutable();
-    attestations::attest(&registry_ref, permit(), subject, TestSchema { tag }, scenario.ctx());
-    test_scenario::return_immutable(registry_ref);
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        registry.attest(permit(), subject, TestSchema { tag }, scenario.ctx());
+    });
 }
 
 #[test]
@@ -113,11 +110,11 @@ fun reissuance_succeeds() {
     let (mut scenario, registry) = setup_with_box(subject);
     let active = box_id(registry, subject, false);
 
-    // Two attestations in one transaction, through the one frozen ref.
-    let registry_ref: RegistryRef = scenario.take_immutable();
-    attestations::attest(&registry_ref, permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
-    attestations::attest(&registry_ref, permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
-    test_scenario::return_immutable(registry_ref);
+    // Two attestations in one transaction, through the same registry.
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        registry.attest(permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
+        registry.attest(permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
+    });
 
     scenario.next_tx(ALICE);
     let ids = attestation_ids(active);
@@ -134,10 +131,11 @@ fun attest_before_create_box() {
     let subject = subject_for(@0xBEEF);
     let (mut scenario, registry) = begin();
 
-    // Attest with NO box created yet.
-    attest_tag(&mut scenario, subject, 9);
-    // Now create the box at the (already-populated) active address.
-    scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        // Issue before the box exists, then claim it in the same transaction.
+        registry.attest(permit(), subject, TestSchema { tag: 9 }, scenario.ctx());
+        registry.create_box(subject);
+    });
 
     scenario.next_tx(ALICE);
     assert_eq!(attestation_ids(box_id(registry, subject, false)).length(), 1);
@@ -178,7 +176,7 @@ fun revoke_moves_to_revoked_address() {
     scenario.end();
 }
 
-/// What the `RegistryRef` guarantees: an attestation always lands at an address
+/// Taking `&Registry` ensures an attestation always lands at an address
 /// a `Box` can be created at, so it stays revocable even when it was made
 /// before the box existed.
 #[test]
@@ -188,6 +186,7 @@ fun attest_then_create_box_then_revoke() {
     let active = box_id(registry, subject, false);
 
     attest_tag(&mut scenario, subject, 3);
+    scenario.next_tx(ALICE);
     scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
 
     scenario.next_tx(ALICE);
@@ -217,6 +216,7 @@ fun revoke_from_wrong_box_aborts() {
     let other_active = box_id(registry, other_subject, false);
 
     scenario.with_shared!<Registry>(|reg, _| reg.create_box(other_subject));
+    scenario.next_tx(ALICE);
     attest_tag(&mut scenario, subject, 7);
 
     scenario.next_tx(ALICE);

@@ -10,7 +10,7 @@
 #
 # e2e/run.sh calls this with the sui client already on the localnet and funded.
 #
-# Usage: PUBFILE=... REGISTRY_ID=... REGISTRY_REF_ID=... SUBJECT=... bash e2e/walkthrough.sh <work-dir>
+# Usage: PUBFILE=... REGISTRY_ID=... SUBJECT=... bash e2e/walkthrough.sh <work-dir>
 
 set -euo pipefail
 
@@ -19,7 +19,6 @@ OPS="$REPO_ROOT/scripts"
 SUI="${SUI:-sui}"
 PUBFILE="${PUBFILE:?PUBFILE is required}"
 REGISTRY="${REGISTRY_ID:?REGISTRY_ID is required}"
-REGISTRY_REF="${REGISTRY_REF_ID:?REGISTRY_REF_ID is required}"
 SUBJECT="${SUBJECT:?SUBJECT is required}"
 WORK="${1:?usage: walkthrough.sh <work-dir>}"
 
@@ -56,9 +55,9 @@ echo "▶ register its Display (guide step 2)"
     --args "$REGISTRY" "$DISPLAY_REGISTRY" >/dev/null
 
 echo "▶ publish two reports (guide step 4)"
-KEPT=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY_REF" "$SUBJECT" \
+KEPT=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
     "Walkthrough report — kept" "https://auditor.example/kept.pdf" "$PUBDATE")
-SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY_REF" "$SUBJECT" \
+SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
     "Walkthrough report — revoked" "https://auditor.example/revoked.pdf" "$PUBDATE")
 echo "  kept $KEPT, to revoke $SUPERSEDED"
 
@@ -85,9 +84,9 @@ expect_rejection() {
     echo "✔ $name rejected"
 }
 
-# A real shared Registry is still the wrong type: attest needs its frozen ref.
+# A real shared object of another type cannot substitute for the Registry.
 expect_rejection wrong-registry-reference 'CommandArgumentError \{ arg_idx: 1, kind: TypeMismatch \} in command 0' \
-    --move-call "$PKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" \
+    --move-call "$PKG::audit::attest_audit" "@$CAP" "@$DISPLAY_REGISTRY" "@$SUBJECT" \
     '"Must not be issued"' '"https://auditor.example/rejected.pdf"' "$PUBDATE"
 
 # Give a second signer its own gas, but leave the AuditAdminCap with the publisher.
@@ -99,7 +98,7 @@ UNAUTHORIZED=$("$SUI" client new-address ed25519 --json | jq -er '.address')
 CAP_OWNERSHIP_ERROR="Object $CAP is owned by account address .*, but given owner/signer address is $UNAUTHORIZED"
 expect_rejection unauthorized-attest "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
-    --move-call "$PKG::audit::attest_audit" "@$CAP" "@$REGISTRY_REF" "@$SUBJECT" \
+    --move-call "$PKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" \
     '"Must not be issued"' '"https://auditor.example/rejected.pdf"' "$PUBDATE"
 expect_rejection unauthorized-revoke "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
