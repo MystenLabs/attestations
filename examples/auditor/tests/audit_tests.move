@@ -19,8 +19,8 @@ fun report_url(): String { b"https://audits.example.com/r.pdf".to_string() }
 fun published_at(): u64 { 1_700_000_000_000 }
 
 /// Publish the registry and create `subject`'s active box. Returns the scenario
-/// at a fresh tx, plus the registry's id — all that `attest_audit` and the
-/// box-address derivations need.
+/// at a fresh tx, plus the registry's id, which the box-address derivations
+/// need. `attest_audit` borrows the shared registry itself.
 fun setup_with_box(subject: ID): (Scenario, ID) {
     let mut scenario = test_scenario::begin(ALICE);
     attestations::init_for_testing(scenario.ctx());
@@ -56,14 +56,16 @@ fun attest_audit_cross_package() {
     let active = box_id(registry, subject, false);
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(
-        registry,
-        subject,
-        description(),
-        report_url(),
-        published_at(),
-        scenario.ctx(),
-    );
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        admin.attest_audit(
+            registry,
+            subject,
+            description(),
+            report_url(),
+            published_at(),
+            scenario.ctx(),
+        );
+    });
     transfer::public_transfer(admin, ALICE);
 
     scenario.next_tx(ALICE);
@@ -93,14 +95,16 @@ fun revoke_audit_with_admin_cap() {
     let revoked = box_id(registry, subject, true);
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    admin.attest_audit(
-        registry,
-        subject,
-        description(),
-        report_url(),
-        published_at(),
-        scenario.ctx(),
-    );
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        admin.attest_audit(
+            registry,
+            subject,
+            description(),
+            report_url(),
+            published_at(),
+            scenario.ctx(),
+        );
+    });
 
     scenario.next_tx(ALICE);
     let id = audit_ids(active)[0];

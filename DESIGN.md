@@ -43,7 +43,7 @@ Registry (shared singleton)
   └── BoxKey{subject, revoked:true}  → revoked address → owns revoked Attestation<T> (no object)
 ```
 
-- **`Registry`** is a `key`-only shared singleton, created in `init`; all per-subject box addresses are derived from its UID.
+- **`Registry`** is a `key`-only shared singleton, created in `init`; all per-subject box addresses are derived from its UID. `attest` takes it by read-only reference (see "Revocation" below).
 - **`Box`** is `key`-only and per-subject. `create_box` claims the *active* box
   and is idempotent (a no-op if it already exists, so a revoker can always call
   it before `revoke`). Each box address is
@@ -113,18 +113,22 @@ permit, not a bare path to forge `Attestation<T>` from a stray `T` value.
 ## Revocation: `Permit<T>`-gated, policy in the schema
 
 ```move
-public fun attest<T: store>(registry: ID, _: Permit<T>, subject: ID, data, ctx): ID
+public fun attest<T: store>(registry: &Registry, _: Permit<T>, subject: ID, data, ctx): ID
 public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestation<T>>)
 ```
 
 `attest` transfers the attestation to `subject`'s active box *address* (derived
 from the registry id) and returns its `ID` — the one piece a schema can't
 otherwise recover, since the object goes straight to the box — so a schema can
-bind a bearer cap to it, log it, or ignore it. It takes the registry by `id`,
-not by reference: it only needs the id to derive the address, and passing the
-shared `Registry` object would force the transaction through consensus, whereas
-by id `attest` has no shared inputs and can run on the owned-object fast path. It
-takes no `Box`, so the box need not exist yet; `create_box` is only a
+bind a bearer cap to it, log it, or ignore it. It takes `&Registry` and derives
+the address from that object's id. Only `init` constructs the registry, so a
+caller cannot substitute an arbitrary id and send an attestation to an address
+where no `Box` can be claimed. The read-only borrow adds a shared-object input,
+but concurrent attestations do not mutate the registry or serialize against
+each other merely by reading it. We accept shared-object version scheduling to
+avoid a separate frozen reference object and its client configuration.
+
+`attest` takes no `Box`, so the box need not exist yet. `create_box` is only a
 prerequisite for `revoke`. `revoke` receives the attestation and moves it to the
 revoked address (derived from the Box's stored `registry`), emitting `Revoked<T>`.
 

@@ -57,8 +57,8 @@ From the output, note three ids you'll need:
   Objects*, matched by the object types ending `::audit::AuditAdminCap` and
   `0x2::package::UpgradeCap`. Both were sent to you; custody them in step 3.
 
-You'll also need the registry's shared **`Registry` object id** from its mainnet
-deployment — used in the call below and every time you issue.
+You'll also need the shared **`Registry`** object id from the registry's mainnet
+deployment. Use it to register your Display, issue reports, and create boxes.
 
 Register your Display once so `Attestation<Audit>` objects render with your name,
 icon, and report links (`0xd` is the system display registry):

@@ -50,9 +50,11 @@ package even if one fails, and exits nonzero if any did.
 @mysten/prettier-plugin-move`); its settings are in `.prettierrc`.
 
 `examples/auditor` depends on the registry by its MVR name, which resolves to the
-*published* package, so `check.sh` alone tests it against that release.
-`check-template.sh` also builds a copy pointed at this checkout's registry, and
-checks that `demo/auditor_*` are still copies of the template.
+*published* package, so built in place it can't see registry changes that
+aren't published yet. `check.sh` therefore skips it by default (`bash
+scripts/check.sh examples/auditor` builds it as published), and
+`check-template.sh` builds a copy pointed at this checkout's registry instead,
+then checks that `demo/auditor_*` are still copies of the template.
 
 `e2e/run.sh` owns the localnet: it publishes everything and runs the demo and
 the template's onboarding guide. Then it runs `cargo test` in `e2e/`, a small

@@ -1,6 +1,6 @@
 module attestations::attestations;
 
-use std::internal::{Self, Permit};
+use std::internal;
 use std::string::String;
 use std::type_name;
 use sui::derived_object;
@@ -84,10 +84,8 @@ public fun attester_of<T>(): address { type_name::original_id<T>() }
 
 // === Attest / Revoke ===
 
-/// Attest about `subject` with `data`. Takes the registry by `id`, not by
-/// reference: `attest` only needs the id to derive the box address, and passing
-/// the shared `Registry` object would force the transaction through consensus —
-/// by id it has no shared inputs and can run on the owned-object fast path.
+/// Attest about `subject` with `data`. Takes the shared `Registry` by read-only
+/// reference so the destination is derived from the registry created by `init`.
 /// Gated by `Permit<T>`: only `T`'s defining module can mint one, so authority
 /// to attest lives in that module — uniform with `revoke` and `register_display`.
 /// The attestation goes to `subject`'s *active* box address
@@ -96,8 +94,8 @@ public fun attester_of<T>(): address { type_name::original_id<T>() }
 /// one piece a schema can't otherwise recover since the object goes straight to
 /// the box.
 public fun attest<T: store>(
-    registry: ID,
-    _: Permit<T>,
+    registry: &Registry,
+    _: internal::Permit<T>,
     subject: ID,
     data: T,
     ctx: &mut TxContext,
@@ -105,7 +103,7 @@ public fun attest<T: store>(
     let attestation = Attestation<T> { id: object::new(ctx), subject, data };
     let attestation_id = object::id(&attestation);
     let box_addr = derived_object::derive_address(
-        registry,
+        object::id(registry),
         BoxKey { subject, revoked: false },
     );
     event::emit(Attested<T> { subject });
@@ -121,7 +119,7 @@ public fun attest<T: store>(
 /// *policy* for who may revoke (a bearer cap, an admin cap, a multisig, …)
 /// lives in that module, while the move and `Revoked<T>` event stay uniform
 /// here — the same split as `register_display`.
-public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestation<T>>) {
+public fun revoke<T: store>(box: &mut Box, _: internal::Permit<T>, rcv: Receiving<Attestation<T>>) {
     let a = transfer::receive(&mut box.id, rcv);
     let subject = a.subject;
     let revoked_addr = derived_object::derive_address(
@@ -150,7 +148,7 @@ public fun revoke<T: store>(box: &mut Box, _: Permit<T>, rcv: Receiving<Attestat
 public fun register_display<T: store>(
     registry: &Registry,
     display_registry: &mut DisplayRegistry,
-    _: Permit<T>,
+    _: internal::Permit<T>,
     fields: vector<String>,
     values: vector<String>,
     ctx: &mut TxContext,
@@ -178,7 +176,7 @@ public fun register_display<T: store>(
 public fun add_display_field<T: store>(
     registry: &mut Registry,
     display: &mut Display<Attestation<T>>,
-    _: Permit<T>,
+    _: internal::Permit<T>,
     rcv: Receiving<DisplayCap<Attestation<T>>>,
     fields: vector<String>,
     values: vector<String>,
@@ -193,7 +191,7 @@ public fun add_display_field<T: store>(
 
 // === Internal ===
 
-/// Create the `Registry` singleton at publish time.
+/// Create the shared `Registry` singleton at publish time.
 fun init(ctx: &mut TxContext) {
     transfer::share_object(Registry { id: object::new(ctx) });
 }
@@ -210,9 +208,9 @@ fun claim_box(registry: &mut Registry, key: BoxKey) {
 // === Test seam ===
 
 /// A subject's active (`revoked == false`) or revoked (`revoked == true`) box
-/// address. Takes the registry by `id`, like `attest`, so a caller can derive
-/// either address without holding the shared object. Tests use it to locate
-/// either address; production callers don't need it (off-chain consumers derive
+/// address. Takes the registry by `id`, so a caller can derive either address
+/// without holding the shared object. Tests use it to locate either address;
+/// production callers don't need it (off-chain consumers derive
 /// box addresses themselves, and `BoxKey` is module-private so there's nothing
 /// to expose on-chain).
 #[test_only]

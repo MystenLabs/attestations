@@ -64,7 +64,7 @@ entry fun register_audit_display(
 /// the `AuditAdminCap`, the single authority over this auditor's attestations.
 public fun attest_audit(
     _: &AuditAdminCap,
-    registry: ID,
+    registry: &Registry,
     subject: ID,
     description: String,
     report_url: String,

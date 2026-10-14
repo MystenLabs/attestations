@@ -140,14 +140,14 @@ Prerequisites:
 
 3. Test-publish all packages with one shared pubfile and register the
    Displays. The script does the whole sequence in one go and prints the
-   `REGISTRY_ID=…` export line you'll need next:
+   `REGISTRY_ID=…` value you'll need next:
    ```bash
    ./demo/scripts/test-publish.sh
    ```
    That writes `Pub.localnet.toml` at the repo root (gitignored — ephemeral
    and per-user).
 
-4. Export the printed Registry id:
+4. Export the printed id of the shared `Registry`:
    ```bash
    export REGISTRY_ID=0x…
    ```

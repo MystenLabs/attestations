@@ -87,7 +87,7 @@ public fun add_audit_v2_methodology_display(
 /// via `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
 public fun attest_audit_v2(
     _: &AuditAdminCap,
-    registry: ID,
+    registry: &Registry,
     subject: ID,
     description: String,
     report_url: String,
@@ -130,7 +130,12 @@ public struct InternalNote has drop, store {
 /// registered for `Attestation<InternalNote>`, so Display-gating consumers
 /// ignore it. Unrevocable — this schema exposes no revoke wrapper (negative
 /// test data).
-public fun attest_internal_note(registry: ID, subject: ID, text: String, ctx: &mut TxContext): ID {
+public fun attest_internal_note(
+    registry: &Registry,
+    subject: ID,
+    text: String,
+    ctx: &mut TxContext,
+): ID {
     attest(
         registry,
         internal::permit<InternalNote>(),

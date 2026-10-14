@@ -179,14 +179,16 @@ fi
 
 echo
 echo "▶ the demo scenario (demo/scripts/demo.sh)"
-GRAPHQL="$GRAPHQL_URL" PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" DEMO_IDS="$WORK/demo-ids.json" \
+GRAPHQL="$GRAPHQL_URL" PUBFILE="$PUBFILE" DEMO_IDS="$WORK/demo-ids.json" \
+    REGISTRY_ID="$REGISTRY_ID" \
     bash "$REPO_ROOT/demo/scripts/demo.sh" | tee "$WORK/demo.log"
 
 # --- 3. Template walkthrough ---
 
 echo
 echo "▶ the examples/auditor onboarding guide (e2e/walkthrough.sh)"
-PUBFILE="$PUBFILE" REGISTRY_ID="$REGISTRY_ID" SUBJECT="$WALKTHROUGH_SUBJECT" \
+PUBFILE="$PUBFILE" SUBJECT="$WALKTHROUGH_SUBJECT" \
+    REGISTRY_ID="$REGISTRY_ID" \
     bash "$REPO_ROOT/e2e/walkthrough.sh" "$WORK" | tee "$WORK/walkthrough.log"
 
 # --- 4. Snapshot ---

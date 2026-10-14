@@ -19,9 +19,8 @@ fun subject_for(addr: address): ID { addr.to_id() }
 /// A `Permit<TestSchema>` — only this module (TestSchema's definer) can mint it.
 fun permit(): std::internal::Permit<TestSchema> { std::internal::permit<TestSchema>() }
 
-/// Publish the registry. Returns the scenario at a fresh tx, plus the registry's
-/// id — all that `attest` and the box-address derivations need, so no test but
-/// this one has to take the shared `Registry`.
+/// Publish the registry. Return the scenario at a fresh transaction and the
+/// registry's id for box-address derivations.
 fun begin(): (Scenario, ID) {
     let mut scenario = test_scenario::begin(ALICE);
     attestations::init_for_testing(scenario.ctx());
@@ -58,6 +57,13 @@ fun attestation_ids(owner: ID): vector<ID> {
     test_scenario::receivable_object_ids_for_owner_id<Attestation<TestSchema>>(owner)
 }
 
+/// Issue a test attestation through the shared registry.
+fun attest_tag(scenario: &mut Scenario, subject: ID, tag: u8) {
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        registry.attest(permit(), subject, TestSchema { tag }, scenario.ctx());
+    });
+}
+
 #[test]
 fun create_box_is_idempotent() {
     let subject = subject_for(@0xDEAD);
@@ -83,7 +89,7 @@ fun attest_and_read() {
     let (mut scenario, registry) = setup_with_box(subject);
     let active = box_id(registry, subject, false);
 
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 42 }, scenario.ctx());
+    attest_tag(&mut scenario, subject, 42);
 
     scenario.next_tx(ALICE);
     let ids = attestation_ids(active);
@@ -104,8 +110,11 @@ fun reissuance_succeeds() {
     let (mut scenario, registry) = setup_with_box(subject);
     let active = box_id(registry, subject, false);
 
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
+    // Two attestations in one transaction, through the same registry.
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        registry.attest(permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
+        registry.attest(permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
+    });
 
     scenario.next_tx(ALICE);
     let ids = attestation_ids(active);
@@ -122,10 +131,11 @@ fun attest_before_create_box() {
     let subject = subject_for(@0xBEEF);
     let (mut scenario, registry) = begin();
 
-    // Attest with NO box created yet.
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 9 }, scenario.ctx());
-    // Now create the box at the (already-populated) active address.
-    scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        // Issue before the box exists, then claim it in the same transaction.
+        registry.attest(permit(), subject, TestSchema { tag: 9 }, scenario.ctx());
+        registry.create_box(subject);
+    });
 
     scenario.next_tx(ALICE);
     assert_eq!(attestation_ids(box_id(registry, subject, false)).length(), 1);
@@ -141,7 +151,7 @@ fun revoke_moves_to_revoked_address() {
     let active = box_id(registry, subject, false);
     let revoked = box_id(registry, subject, true);
 
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 7 }, scenario.ctx());
+    attest_tag(&mut scenario, subject, 7);
 
     scenario.next_tx(ALICE);
     let att_id = attestation_ids(active)[0];
@@ -163,6 +173,82 @@ fun revoke_moves_to_revoked_address() {
     assert_eq!(revoked_ids.length(), 1);
     assert_eq!(revoked_ids[0], att_id);
 
+    scenario.end();
+}
+
+/// Taking `&Registry` ensures an attestation always lands at an address
+/// a `Box` can be created at, so it stays revocable even when it was made
+/// before the box existed.
+#[test]
+fun attest_then_create_box_then_revoke() {
+    let subject = subject_for(@0xBEEF);
+    let (mut scenario, registry) = begin();
+    let active = box_id(registry, subject, false);
+
+    attest_tag(&mut scenario, subject, 3);
+    scenario.next_tx(ALICE);
+    scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
+
+    scenario.next_tx(ALICE);
+    let att_id = attestation_ids(active)[0];
+    scenario.with_shared_by_id!<Box>(active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+
+    scenario.next_tx(ALICE);
+    assert!(attestation_ids(active).is_empty());
+    assert_eq!(attestation_ids(box_id(registry, subject, true)), vector[att_id]);
+    scenario.end();
+}
+
+#[test, expected_failure(abort_code = sui::transfer::EUnableToReceiveObject)]
+fun revoke_from_wrong_box_aborts() {
+    let subject = subject_for(@0xDEAD);
+    let other_subject = subject_for(@0xBEEF);
+    let (mut scenario, registry) = setup_with_box(subject);
+    let active = box_id(registry, subject, false);
+    let other_active = box_id(registry, other_subject, false);
+
+    scenario.with_shared!<Registry>(|reg, _| reg.create_box(other_subject));
+    scenario.next_tx(ALICE);
+    attest_tag(&mut scenario, subject, 7);
+
+    scenario.next_tx(ALICE);
+    let att_id = attestation_ids(active)[0];
+    scenario.with_shared_by_id!<Box>(other_active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+    scenario.end();
+}
+
+#[
+    test,
+    expected_failure(
+        abort_code = sui::transfer::EUnableToReceiveObject,
+        location = sui::transfer,
+    ),
+]
+fun revoke_twice_aborts() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, registry) = setup_with_box(subject);
+    let active = box_id(registry, subject, false);
+    let revoked = box_id(registry, subject, true);
+
+    attest_tag(&mut scenario, subject, 7);
+
+    scenario.next_tx(ALICE);
+    let att_id = attestation_ids(active)[0];
+    scenario.with_shared_by_id!<Box>(active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
+
+    scenario.next_tx(ALICE);
+    assert!(attestation_ids(active).is_empty());
+    assert_eq!(attestation_ids(revoked), vector[att_id]);
+    // Use a fresh ticket, so the failure tests ownership rather than a stale version.
+    scenario.with_shared_by_id!<Box>(active, |box, _| {
+        box.revoke(permit(), test_scenario::receiving_ticket_by_id(att_id));
+    });
     scenario.end();
 }
 

@@ -16,9 +16,10 @@
 #   - revoke the subject's v1 audit
 #   - write demo-ids.json for the MVR seeder
 #
-# Requires: REGISTRY_ID env; packages test-published (Pub.localnet.toml); the
-# active sui client address funded and holding the AuditAdminCap; a GraphQL
-# endpoint for the network (GRAPHQL, default the localnet's :9125).
+# Requires: REGISTRY_ID env (the shared Registry used by create_box and attest);
+# packages test-published (Pub.localnet.toml); the active sui client address funded and
+# holding the AuditAdminCap; a GraphQL endpoint for the network (GRAPHQL,
+# default the localnet's :9125).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
