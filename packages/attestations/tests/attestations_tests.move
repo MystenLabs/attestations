@@ -201,12 +201,7 @@ fun attest_then_create_box_then_revoke() {
     scenario.end();
 }
 
-#[
-    test,
-    expected_failure(
-        abort_code = sui::transfer::EUnableToReceiveObject,
-    ),
-]
+#[test, expected_failure(abort_code = sui::transfer::EUnableToReceiveObject)]
 fun revoke_from_wrong_box_aborts() {
     let subject = subject_for(@0xDEAD);
     let other_subject = subject_for(@0xBEEF);
