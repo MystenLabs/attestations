@@ -13,12 +13,12 @@ public struct Audit has drop, store {
     description: String,
     /// URL of the full audit report (surfaced via the `link` convention).
     report_url: String,
-    /// Report publication date (ms since epoch), surfaced via the
-    /// `published_at` convention.
-    published_at_ms: u64,
     /// Digest of the report at `report_url`, surfaced via the `link_hash`
     /// convention (e.g. `sha256:…`). `none` when no digest was recorded.
     report_hash: Option<String>,
+    /// Report publication date (ms since epoch), surfaced via the
+    /// `published_at` convention.
+    published_at_ms: u64,
 }
 
 /// Single-party authority to *control* this auditor's attestations: whoever
@@ -34,9 +34,9 @@ fun init(ctx: &mut TxContext) {
 }
 
 /// One-shot setup: register the append-only `Display<Attestation<Audit>>` with
-/// the full presentation set (name, description, link, image, publish date).
-/// Should be called once shortly after publish; aborts on second call
-/// (V2 enforcement via `display_registry`).
+/// the full presentation set (name, description, link, link hash, image,
+/// publish date). Should be called once shortly after publish; aborts on second
+/// call (V2 enforcement via `display_registry`).
 entry fun register_audit_display(
     registry: &Registry,
     display_registry: &mut DisplayRegistry,

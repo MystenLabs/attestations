@@ -10,22 +10,26 @@ active box (attestations::attestations::Box object)
     data:
       description: Dependency audit — no findings
       report_url: https://audits.example.com/dependency-v1.pdf
+      report_hash: sha256:b3c7e89209978ba5144036238115b0b8f1e0b4dda01bb195584e36a1ce67f046
       published_at_ms: 1748736000000
     display:
       name: Audit attestation
       description: Dependency audit — no findings
       link: https://audits.example.com/dependency-v1.pdf
+      link_hash: sha256:b3c7e89209978ba5144036238115b0b8f1e0b4dda01bb195584e36a1ce67f046
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
   auditor_c::audit::Audit
     data:
       description: Dependency audit — clean
       report_url: https://auditor-c.example/dependency.pdf
+      report_hash: null
       published_at_ms: 1748736000000
     display:
       name: Auditor C audit
       description: Dependency audit — clean
       link: https://auditor-c.example/dependency.pdf
+      link_hash: null
       image_url: https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg
       published_at: 2025-06-01T00:00:00Z
 
@@ -58,22 +62,26 @@ active box (attestations::attestations::Box object)
     data:
       description: Auditor B review
       report_url: https://auditor-b.example/r.pdf
+      report_hash: null
       published_at_ms: 1748736000000
     display:
       name: Audit attestation
       description: Auditor B review
       link: https://auditor-b.example/r.pdf
+      link_hash: null
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
   auditor_c::audit::Audit
     data:
       description: Subject audit — no critical findings
       report_url: https://auditor-c.example/subject.pdf
+      report_hash: sha256:09ddf4f54a91585702b79c871be8232e7fb93e3965d49dc88aaecf973bb6f91d
       published_at_ms: 1748736000000
     display:
       name: Auditor C audit
       description: Subject audit — no critical findings
       link: https://auditor-c.example/subject.pdf
+      link_hash: sha256:09ddf4f54a91585702b79c871be8232e7fb93e3965d49dc88aaecf973bb6f91d
       image_url: https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg
       published_at: 2025-06-01T00:00:00Z
 
@@ -82,11 +90,13 @@ revoked address (no object)
     data:
       description: Subject audit (v1) — superseded
       report_url: https://audits.example.com/subject-v1.pdf
+      report_hash: null
       published_at_ms: 1748736000000
     display:
       name: Audit attestation
       description: Subject audit (v1) — superseded
       link: https://audits.example.com/subject-v1.pdf
+      link_hash: null
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
 
@@ -98,11 +108,13 @@ active box (attestations::attestations::Box object)
     data:
       description: Walkthrough report — kept
       report_url: https://auditor.example/kept.pdf
+      report_hash: sha256:415a18ef6736ae1aadeb8363b8a9728814912b124b954fe1b9bb579782086117
       published_at_ms: 1748736000000
     display:
       name: Audit attestation
       description: Walkthrough report — kept
       link: https://auditor.example/kept.pdf
+      link_hash: sha256:415a18ef6736ae1aadeb8363b8a9728814912b124b954fe1b9bb579782086117
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
 
@@ -111,11 +123,13 @@ revoked address (no object)
     data:
       description: Walkthrough report — revoked
       report_url: https://auditor.example/revoked.pdf
+      report_hash: null
       published_at_ms: 1748736000000
     display:
       name: Audit attestation
       description: Walkthrough report — revoked
       link: https://auditor.example/revoked.pdf
+      link_hash: null
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
 

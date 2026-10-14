@@ -15,7 +15,7 @@ This README walks a new auditor from the template to publishing live reports.
 The Move code (`sources/audit.move`) defines three things you'll work with:
 
 - **`Audit`** — a completed review: a human-readable description, a link to the
-  full report, and the report's publication date.
+  full report, optionally the report's digest, and its publication date.
 - **`AuditAdminCap`** — the single authority that may issue or revoke this
   auditor's attestations, minted at publish and sent to the publisher.
 - **`register_audit_display`** — run once after publishing, so your attestations
@@ -91,13 +91,19 @@ Publishing a report requires one `attest_audit` call:
 ```sh
 sui client ptb \
   --move-call <your-pkg>::audit::attest_audit \
-    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' <published-at-ms> \
+    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' \
+    '<report-hash>' <published-at-ms> \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > attest-tx.b64
 ```
 
 `<subject>` is the id of the package (or any object) you reviewed, and
 `<published-at-ms>` is the publication date in milliseconds since the Unix epoch.
+`<report-hash>` lets readers check that the report at `<report-url>` is the one
+you published: `some("sha256:<hex>")`, with the SHA-256 of the exact file you
+host (`shasum -a 256 report.pdf`), or `none` to record no digest. The digest
+can't be changed after you attest, so hash the final file, and serve it
+byte-for-byte unchanged.
 In a `--move-call` target, the package can be its mvr name — e.g. the
 `@your-org/audits` you registered — instead of an address; the other arguments
 (`@<registry>`, `@<admin-cap>`, `@<subject>`, …) must be addresses.
@@ -112,8 +118,8 @@ transaction size limits, in which case you can break the PTB into multiple PTBs)
 
 ```sh
 sui client ptb \
-  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectA> '"..."' '"..."' <date> \
-  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectB> '"..."' '"..."' <date> \
+  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectA> '"..."' '"..."' '<hash>' <date> \
+  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectB> '"..."' '"..."' '<hash>' <date> \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > backfill-tx.b64
 ```
@@ -180,4 +186,4 @@ execute through your multisig, as with an attestation transaction.
 
 - Attester-identity model and registry design — the registry repo's `DESIGN.md`.
 - Display field conventions (`name`, `description`, `image_url`, `link`,
-  `published_at`) — `CONVENTIONS.md`.
+  `link_hash`, `published_at`) — `CONVENTIONS.md`.
