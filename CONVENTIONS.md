@@ -35,12 +35,13 @@ consumers.
   thumbnail, etc. Either an `https` URL or an inline `data:image/svg+xml` URI
   (see *Inline SVG* below).
 - **`link`** — a URL to the full artifact (the audit report, the CVE record).
-- **`link_hash`** — a digest of the artifact at `link`, letting a consumer
-  confirm a fetched document matches what was attested. Algorithm-prefixed hex
-  (e.g. `sha256:9f86d0…`), so the algorithm is explicit and swappable. A schema
-  can make it optional (an `Option<String>` field), omitting it for attestations
-  with no recorded digest. Like `link`, it's *attester-supplied* — see the
-  security note.
+- **`link_hash`** — a digest of the exact bytes served at `link`, letting a
+  consumer confirm a fetched document matches what was attested. Written
+  `<algorithm>:<lowercase hex>` (e.g. `sha256:9f86d0…`), so the algorithm is
+  explicit and can change later; `sha256` is the one to use today. A schema can
+  make it optional with an `Option<String>` field: Display renders `some` as the
+  digest and `none` as `null` (not an empty string, and not a Display error).
+  Like `link`, it's *attester-supplied* — see the security note.
 - **`published_at`** — publication date of the attested artifact (e.g. an audit
   report), so consumers can show "published on …". Rendered from a `u64` ms field
   via Display V2's `:ts` transform (`{data.published_at_ms:ts}`). It's
@@ -93,6 +94,10 @@ content*, so:
   a consumer who re-hashes the fetched document can tell it changed since it was
   attested, but the guarantee is only as strong as trust in that attester and in
   the recorded digest. It is not, on its own, proof of the document's contents.
+  Showing the digest beside the link verifies nothing: a consumer may present a
+  document as matching only after hashing the bytes it fetched itself, and
+  should treat a digest in an algorithm it doesn't support as unverifiable, not
+  as a mismatch.
 
 ## Adding a new convention
 
