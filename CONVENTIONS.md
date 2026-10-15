@@ -35,6 +35,13 @@ consumers.
   thumbnail, etc. Either an `https` URL or an inline `data:image/svg+xml` URI
   (see *Inline SVG* below).
 - **`link`** — a URL to the full artifact (the audit report, the CVE record).
+- **`link_hash`** — a digest of the exact bytes served at `link`, letting a
+  consumer confirm a fetched document matches what was attested. Written
+  `<algorithm>:<lowercase hex>` (e.g. `sha256:9f86d0…`), so the algorithm is
+  explicit and can change later; `sha256` is the one to use today. A schema can
+  make it optional with an `Option<String>` field: Display renders `some` as the
+  digest and `none` as `null` (not an empty string, and not a Display error).
+  Like `link`, it's *attester-supplied* — see the security note.
 - **`published_at`** — publication date of the attested artifact (e.g. an audit
   report), so consumers can show "published on …". Rendered from a `u64` ms field
   via Display V2's `:ts` transform (`{data.published_at_ms:ts}`). It's
@@ -44,6 +51,8 @@ consumers.
 ```move
 fields.push_back(b"link".to_string());
 values.push_back(b"{data.report_url}".to_string());
+fields.push_back(b"link_hash".to_string());
+values.push_back(b"{data.report_hash}".to_string());
 ```
 
 **Inline SVG.** `image_url` may be a `data:image/svg+xml` URI rather than a
@@ -65,7 +74,8 @@ encoding.
 
 [sui-potatoes/app]: https://github.com/sui-potatoes/app
 
-**Security note.** `image_url` and `link` are *attester-supplied content*, so:
+**Security note.** `image_url`, `link`, and `link_hash` are *attester-supplied
+content*, so:
 
 - They must never be used to derive **identity** — which attester issued an
   attestation is established by `T`'s defining package (the bytecode-anchored
@@ -80,6 +90,14 @@ encoding.
   `<script>` or an `onload` attribute inside the SVG would run with the
   consumer's origin. This is a sharper risk than a bad URL, because here the
   attester supplies the content itself, not just a pointer to it.
+- `link_hash` is tamper-evidence *relative to the digest the attester recorded*:
+  a consumer who re-hashes the fetched document can tell it changed since it was
+  attested, but the guarantee is only as strong as trust in that attester and in
+  the recorded digest. It is not, on its own, proof of the document's contents.
+  Showing the digest beside the link verifies nothing: a consumer may present a
+  document as matching only after hashing the bytes it fetched itself, and
+  should treat a digest in an algorithm it doesn't support as unverifiable, not
+  as a mismatch.
 
 ## Adding a new convention
 

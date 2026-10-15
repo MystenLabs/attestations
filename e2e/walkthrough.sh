@@ -54,9 +54,10 @@ echo "▶ register its Display (guide step 2)"
 "$SUI" client call --package "$PKG" --module audit --function register_audit_display \
     --args "$REGISTRY" "$DISPLAY_REGISTRY" >/dev/null
 
-echo "▶ publish two reports (guide step 4)"
+echo "▶ publish two reports, one with a report digest (guide step 4)"
 KEPT=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
-    "Walkthrough report — kept" "https://auditor.example/kept.pdf" "$PUBDATE")
+    "Walkthrough report — kept" "https://auditor.example/kept.pdf" "$PUBDATE" \
+    "sha256:415a18ef6736ae1aadeb8363b8a9728814912b124b954fe1b9bb579782086117")
 SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
     "Walkthrough report — revoked" "https://auditor.example/revoked.pdf" "$PUBDATE")
 echo "  kept $KEPT, to revoke $SUPERSEDED"
@@ -87,7 +88,7 @@ expect_rejection() {
 # A real shared object of another type cannot substitute for the Registry.
 expect_rejection wrong-registry-reference 'CommandArgumentError \{ arg_idx: 1, kind: TypeMismatch \} in command 0' \
     --move-call "$PKG::audit::attest_audit" "@$CAP" "@$DISPLAY_REGISTRY" "@$SUBJECT" \
-    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' "$PUBDATE"
+    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE"
 
 # Give a second signer its own gas, but leave the AuditAdminCap with the publisher.
 # Keep the active address unchanged so the successful revoke below uses the owner.
@@ -99,7 +100,7 @@ CAP_OWNERSHIP_ERROR="Object $CAP is owned by account address .*, but given owner
 expect_rejection unauthorized-attest "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
     --move-call "$PKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" \
-    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' "$PUBDATE"
+    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE"
 expect_rejection unauthorized-revoke "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
     --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$BOX" "@$SUPERSEDED"

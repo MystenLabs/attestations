@@ -87,6 +87,12 @@ echo "admin cap:   $CAP"
 # convention. A real auditor passes the actual report date.
 PUBDATE=1748736000000   # 2025-06-01
 
+# Report digests, surfaced via the link_hash convention. Two audits carry one
+# and the rest record none, so both renderings show. A real auditor passes the
+# digest of the report it actually published.
+DEP_REPORT_HASH=sha256:b3c7e89209978ba5144036238115b0b8f1e0b4dda01bb195584e36a1ce67f046
+AUDITOR_C_SUBJ_REPORT_HASH=sha256:09ddf4f54a91585702b79c871be8232e7fb93e3965d49dc88aaecf973bb6f91d
+
 echo "▶ create boxes (dependency v1 + subject)"
 DEP_BOX=$(bash "$OPS/create-box.sh" "$REGPKG" "$REGISTRY" "$DEP_V1")
 SUBJ_BOX=$(bash "$OPS/create-box.sh" "$REGPKG" "$REGISTRY" "$SUBJ")
@@ -94,7 +100,7 @@ echo "  dependency v1 active box: $DEP_BOX"
 echo "  subject active box:       $SUBJ_BOX"
 
 echo "▶ attest_audit on dependency v1 (stays active; v2 the latest, left unaudited)"
-DEP_AUDIT=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — no findings" "https://audits.example.com/dependency-v1.pdf" "$PUBDATE")
+DEP_AUDIT=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — no findings" "https://audits.example.com/dependency-v1.pdf" "$PUBDATE" "$DEP_REPORT_HASH")
 echo "  $DEP_AUDIT"
 
 echo "▶ attest_audit_v2 on subject (score 95, the live signal)"
@@ -120,7 +126,7 @@ sui client ptb \
 
 echo "▶ Auditor C audits (a second trusted auditor): subject + dependency v1"
 AUDITOR_C_CAP=$(find_owned "$ADDR" "$AUDITOR_C::audit::AuditAdminCap")
-bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$SUBJ" "Subject audit — no critical findings" "https://auditor-c.example/subject.pdf" "$PUBDATE" >/dev/null
+bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$SUBJ" "Subject audit — no critical findings" "https://auditor-c.example/subject.pdf" "$PUBDATE" "$AUDITOR_C_SUBJ_REPORT_HASH" >/dev/null
 bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — clean" "https://auditor-c.example/dependency.pdf" "$PUBDATE" >/dev/null
 
 echo "▶ revoke the subject's v1 audit (the dependency v1 audit stays active)"
