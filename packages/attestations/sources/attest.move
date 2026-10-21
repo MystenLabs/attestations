@@ -14,6 +14,9 @@ use sui::transfer::Receiving;
 #[error(code = 0)]
 const EFieldExists: vector<u8> = b"Display field already exists; add_display_field is append-only";
 
+#[error(code = 1)]
+const EAlreadyRevoked: vector<u8> = b"Attestation is already revoked; revocation is terminal";
+
 /// Derivation root attestations access.
 public struct Registry has key {
     id: UID,
@@ -77,6 +80,7 @@ public fun revoke<T: store>(
 
     let mut attestation = transfer::receive(&mut r.anchors[subject], attestation);
     assert!(subject == attestation.subject);
+    assert!(attestation.revoked_at_ms.is_none(), EAlreadyRevoked);
     attestation.revoked_at_ms.fill(clock.timestamp_ms());
     event::emit(Revoked<T> { subject });
     transfer::transfer(attestation, derived_object::derive_address(r.id.to_inner(), subject));
