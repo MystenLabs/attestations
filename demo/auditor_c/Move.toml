@@ -4,4 +4,4 @@ edition = "2024"
 
 [dependencies]
 # A published auditor points this at the registry's mvr name instead of the local path.
-attestations = { local = "../../packages/attestations" }
+attestations = { local = "../../packages/attestations-v2" }

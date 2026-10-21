@@ -4,16 +4,17 @@
 /// publish. The publish script copies it into `sources/` only for the
 /// upgrade step (see `demo/scripts/test-publish.sh`). As a result `AuditV2`'s
 /// defining (origin) package id is the *upgraded* package id — distinct from
-/// auditor_a's original publish id — while `attester_of<AuditV2>()` still
-/// resolves to the original id. That mismatch is exactly the schema-evolution
+/// auditor_a's original publish id — while `type_name::original_id<AuditV2>()`
+/// still resolves to the original id. That mismatch is exactly the schema-evolution
 /// case the trusted-attestor matching must handle: trusting auditor_a's
 /// original id should surface `Attestation<AuditV2>` too.
 module auditor_a::audit_v2;
 
-use attestations::attestations::{Registry, Box, Attestation, attest};
+use attestations::attestations::{Registry, Attestation};
 use auditor_a::audit::AuditAdminCap;
 use std::internal;
 use std::string::String;
+use sui::clock::Clock;
 use sui::display_registry::{DisplayRegistry, Display, DisplayCap};
 use sui::transfer::Receiving;
 
@@ -54,11 +55,11 @@ public fun register_audit_v2_display(
         ],
         vector[
             b"Audit attestation (v2)".to_string(),
-            b"{data.description}".to_string(),
-            b"{data.report_url}".to_string(),
+            b"{inner.description}".to_string(),
+            b"{inner.report_url}".to_string(),
             b"https://example.com/auditor-icon.svg".to_string(),
-            b"{data.published_at_ms:ts}".to_string(),
-            b"{data.score}/100".to_string(),
+            b"{inner.published_at_ms:ts}".to_string(),
+            b"{inner.score}/100".to_string(),
         ],
         ctx,
     );
@@ -83,8 +84,8 @@ public fun add_audit_v2_methodology_display(
     );
 }
 
-/// Issue an AuditV2 attestation about `subject` and return its `ID`. Revocable
-/// via `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
+/// Issue an AuditV2 attestation about `subject`. Revocable via
+/// `revoke_audit_v2` (same `AuditAdminCap` as v1 audits).
 public fun attest_audit_v2(
     _: &AuditAdminCap,
     registry: &Registry,
@@ -93,21 +94,29 @@ public fun attest_audit_v2(
     report_url: String,
     published_at_ms: u64,
     score: u8,
+    clock: &Clock,
     ctx: &mut TxContext,
-): ID {
-    attest(
-        registry,
+) {
+    registry.attest(
         internal::permit<AuditV2>(),
         subject,
         AuditV2 { description, report_url, published_at_ms, score },
+        clock,
         ctx,
-    )
+    );
 }
 
 /// Revoke an `Attestation<AuditV2>`, reusing the auditor_a's `AuditAdminCap`
 /// (one authority covers every audit type this package defines).
-public fun revoke_audit_v2(_: &AuditAdminCap, box: &mut Box, rcv: Receiving<Attestation<AuditV2>>) {
-    box.revoke(internal::permit<AuditV2>(), rcv);
+public fun revoke_audit_v2(
+    _: &AuditAdminCap,
+    registry: &mut Registry,
+    subject: ID,
+    rcv: Receiving<Attestation<AuditV2>>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    registry.revoke(internal::permit<AuditV2>(), subject, rcv, clock, ctx);
 }
 
 /// The numeric audit score.
@@ -126,21 +135,21 @@ public struct InternalNote has drop, store {
     text: String,
 }
 
-/// Issue an InternalNote attestation and return its `ID`. No Display is
-/// registered for `Attestation<InternalNote>`, so Display-gating consumers
-/// ignore it. Unrevocable — this schema exposes no revoke wrapper (negative
-/// test data).
+/// Issue an InternalNote attestation. No Display is registered for
+/// `Attestation<InternalNote>`, so Display-gating consumers ignore it.
+/// Unrevocable — this schema exposes no revoke wrapper (negative test data).
 public fun attest_internal_note(
     registry: &Registry,
     subject: ID,
     text: String,
+    clock: &Clock,
     ctx: &mut TxContext,
-): ID {
-    attest(
-        registry,
+) {
+    registry.attest(
         internal::permit<InternalNote>(),
         subject,
         InternalNote { text },
+        clock,
         ctx,
-    )
+    );
 }
