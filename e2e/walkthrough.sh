@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Follow examples/auditor/README.md's onboarding guide on a localnet, the way a
 # new auditor would: publish a copy of the template, register its Display,
-# publish two reports about a subject, and revoke one of the reports. Also check that the wrong registry reference and a caller
-# who does not own the admin cap are rejected before they can change that state.
+# publish two reports about a subject, and revoke one of the reports. Also check
+# that the wrong registry reference, a caller who does not own the admin cap,
+# and a revoke of another schema's attestation are rejected before they can
+# change that state.
 #
 # The copy's registry dependency points at this checkout's registry
-# (scripts/copy-template.sh), which test-publish finds in PUBFILE.
+# (scripts/copy-template.sh), which test-publish finds in PUBFILE. DEMO_IDS is
+# the demo's demo-ids.json, which names the other schema's attestation.
 #
-# e2e/run.sh calls this with the sui client already on the localnet and funded.
+# e2e/run.sh calls this after the demo, with the sui client already on the
+# localnet and funded.
 #
-# Usage: PUBFILE=... REGISTRY_ID=... SUBJECT=... bash e2e/walkthrough.sh <work-dir>
+# Usage: PUBFILE=... REGISTRY_ID=... SUBJECT=... DEMO_IDS=... bash e2e/walkthrough.sh <work-dir>
 
 set -euo pipefail
 
@@ -19,6 +23,7 @@ SUI="${SUI:-sui}"
 PUBFILE="${PUBFILE:?PUBFILE is required}"
 REGISTRY="${REGISTRY_ID:?REGISTRY_ID is required}"
 SUBJECT="${SUBJECT:?SUBJECT is required}"
+DEMO_IDS="${DEMO_IDS:?DEMO_IDS is required}"
 WORK="${1:?usage: walkthrough.sh <work-dir>}"
 
 DISPLAY_REGISTRY=0xd    # the system display registry
@@ -94,6 +99,17 @@ expect_rejection unauthorized-attest "$CAP_OWNERSHIP_ERROR" \
 expect_rejection unauthorized-revoke "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
     --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" "@$SUPERSEDED" @0x6
+
+# Revoking is per schema: this auditor's revoke must not take another schema's
+# attestation, even through that attestation's own subject. The demo's auditor_a
+# audit of dependency v1 has a type of the same name, audit::Audit, in another
+# package.
+OTHER_SUBJECT=$(jq -er '.subjects.dependency' "$DEMO_IDS")
+OTHER_AUDIT=$(jq -er '.createdAttestations.dependencyAudit' "$DEMO_IDS")
+# Code 2 is sui::transfer's EReceivingObjectTypeMismatch. A wrong subject would
+# fail with 3, EUnableToReceiveObject, instead.
+expect_rejection other-schema-revoke "transfer::receive_impl' at instruction [0-9]+ with code 2\$" \
+    --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$REGISTRY" "@$OTHER_SUBJECT" "@$OTHER_AUDIT" @0x6
 
 # The authorized operation still succeeds after the rejected attempts. The final
 # snapshot also checks that they emitted no registry events or extra attestations.

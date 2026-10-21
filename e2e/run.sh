@@ -188,7 +188,7 @@ GRAPHQL="$GRAPHQL_URL" PUBFILE="$PUBFILE" DEMO_IDS="$WORK/demo-ids.json" \
 echo
 echo "▶ the examples/auditor onboarding guide (e2e/walkthrough.sh)"
 PUBFILE="$PUBFILE" SUBJECT="$WALKTHROUGH_SUBJECT" \
-    REGISTRY_ID="$REGISTRY_ID" \
+    REGISTRY_ID="$REGISTRY_ID" DEMO_IDS="$WORK/demo-ids.json" \
     bash "$REPO_ROOT/e2e/walkthrough.sh" "$WORK" | tee "$WORK/walkthrough.log"
 
 # --- 4. Snapshot ---
