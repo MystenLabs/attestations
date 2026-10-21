@@ -127,3 +127,19 @@ public fun add_display_field<T: store>(
     });
     transfer::public_transfer(cap, registry.id.to_address());
 }
+
+// === Test seam ===
+
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(ctx);
+}
+
+#[test_only]
+public fun package<T: store>(self: &Attestation<T>): ID { self.package }
+
+#[test_only]
+public fun inner<T: store>(self: &Attestation<T>): &T { &self.inner }
+
+#[test_only]
+public fun revoked_at_ms<T: store>(self: &Attestation<T>): Option<u64> { self.revoked_at_ms }
