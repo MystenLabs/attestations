@@ -7,6 +7,7 @@ use std::string::String;
 use sui::clock::Clock;
 use sui::derived_object;
 use sui::display_registry::{Self, Display, DisplayRegistry, DisplayCap};
+use sui::event;
 use sui::table::{Self, Table};
 use sui::transfer::Receiving;
 
@@ -29,6 +30,16 @@ public struct Attestation<T: store> has key {
     revoked_at_ms: Option<u64>,
 }
 
+/// Emitted when an `Attestation<T>` is added for `subject`.
+public struct Attested<phantom T> has copy, drop {
+    subject: ID,
+}
+
+/// Emitted when an `Attestation<T>` is revoked for `subject`.
+public struct Revoked<phantom T> has copy, drop {
+    subject: ID,
+}
+
 public fun attest<T: store>(
     r: &Registry,
     _: internal::Permit<T>,
@@ -37,6 +48,7 @@ public fun attest<T: store>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
+    event::emit(Attested<T> { subject: package });
     transfer::transfer(
         Attestation {
             id: object::new(ctx),
@@ -66,6 +78,7 @@ public fun revoke<T: store>(
     let mut attestation = transfer::receive(&mut r.anchors[package], attestation);
     assert!(package == attestation.package);
     attestation.revoked_at_ms.fill(clock.timestamp_ms());
+    event::emit(Revoked<T> { subject: package });
     transfer::transfer(attestation, derived_object::derive_address(r.id.to_inner(), package));
 }
 
