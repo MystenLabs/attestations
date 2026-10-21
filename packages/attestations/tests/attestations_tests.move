@@ -64,9 +64,10 @@ fun address_of(registry: ID, subject: ID): address {
 /// The ids of the `Attestation<T>`s at `subject`'s address, live and revoked
 /// alike.
 fun ids<T: store>(registry: ID, subject: ID): vector<ID> {
-    test_scenario::receivable_object_ids_for_owner_id<Attestation<T>>(
-        address_of(registry, subject).to_id(),
-    )
+    test_scenario::receivable_object_ids_for_owner_id<Attestation<T>>(address_of(
+        registry,
+        subject,
+    ).to_id())
 }
 
 /// Attest about `subject` through the shared registry.
