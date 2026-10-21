@@ -1,6 +1,6 @@
-/// Packages are identifiable by their ID.
+/// Subjects are identifiable by their ID.
 ///
-/// A derived address is used for each package to store / revoke attestations.
+/// A derived address is used for each subject to store / revoke attestations.
 module attestations::attestations;
 
 use std::string::String;
@@ -25,7 +25,7 @@ public struct Registry has key {
 public struct Attestation<T: store> has key {
     id: UID,
     data: T,
-    package: ID,
+    subject: ID,
     created_at_ms: u64,
     revoked_at_ms: Option<u64>,
 }
@@ -43,21 +43,21 @@ public struct Revoked<phantom T> has copy, drop {
 public fun attest<T: store>(
     r: &Registry,
     _: internal::Permit<T>,
-    package: ID,
+    subject: ID,
     data: T,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    event::emit(Attested<T> { subject: package });
+    event::emit(Attested<T> { subject });
     transfer::transfer(
         Attestation {
             id: object::new(ctx),
             data,
-            package,
+            subject,
             created_at_ms: clock.timestamp_ms(),
             revoked_at_ms: option::none(),
         },
-        derived_object::derive_address(r.id.to_inner(), package),
+        derived_object::derive_address(r.id.to_inner(), subject),
     );
 }
 
@@ -65,21 +65,21 @@ public fun attest<T: store>(
 public fun revoke<T: store>(
     r: &mut Registry,
     _: internal::Permit<T>,
-    package: ID,
+    subject: ID,
     attestation: Receiving<Attestation<T>>,
     clock: &Clock,
     _ctx: &mut TxContext,
 ) {
     // If anchor hasn't yet been created, create on request.
-    if (!r.anchors.contains(package)) {
-        r.anchors.add(package, derived_object::claim(&mut r.id, package));
+    if (!r.anchors.contains(subject)) {
+        r.anchors.add(subject, derived_object::claim(&mut r.id, subject));
     };
 
-    let mut attestation = transfer::receive(&mut r.anchors[package], attestation);
-    assert!(package == attestation.package);
+    let mut attestation = transfer::receive(&mut r.anchors[subject], attestation);
+    assert!(subject == attestation.subject);
     attestation.revoked_at_ms.fill(clock.timestamp_ms());
-    event::emit(Revoked<T> { subject: package });
-    transfer::transfer(attestation, derived_object::derive_address(r.id.to_inner(), package));
+    event::emit(Revoked<T> { subject });
+    transfer::transfer(attestation, derived_object::derive_address(r.id.to_inner(), subject));
 }
 
 fun init(ctx: &mut TxContext) {
@@ -136,7 +136,7 @@ public fun init_for_testing(ctx: &mut TxContext) {
 }
 
 #[test_only]
-public fun package<T: store>(self: &Attestation<T>): ID { self.package }
+public fun subject<T: store>(self: &Attestation<T>): ID { self.subject }
 
 #[test_only]
 public fun data<T: store>(self: &Attestation<T>): &T { &self.data }

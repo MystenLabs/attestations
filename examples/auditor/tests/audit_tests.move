@@ -82,7 +82,7 @@ fun attest_audit_cross_package() {
     let ids = audit_ids(anchor);
     assert_eq!(ids.length(), 1);
     let a: Attestation<Audit> = scenario.take_from_address_by_id(anchor, ids[0]);
-    assert_eq!(a.package(), subject);
+    assert_eq!(a.subject(), subject);
     assert!(a.revoked_at_ms().is_none());
     test_scenario::return_to_address(anchor, a);
 

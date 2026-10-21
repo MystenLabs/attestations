@@ -254,13 +254,13 @@ fn render_attestation(
     let mut lines = vec![format!("  {}", names.rename(&schema))];
 
     let json = &attestation.contents.json;
-    let field_subject: Address = json["package"]
+    let field_subject: Address = json["subject"]
         .as_str()
-        .context("attestation without a package")?
+        .context("attestation without a subject")?
         .parse()?;
     if field_subject != subject {
         lines.push(format!(
-            "    !! its package field is {}",
+            "    !! its subject field is {}",
             names.label(field_subject)
         ));
     }
