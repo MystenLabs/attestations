@@ -80,13 +80,13 @@ impl Names {
             } else {
                 self.add(pkg.original_id, &name);
             }
-            if name == "attestations-v2" {
+            if name == "attestations" {
                 // Types are named after the package version that defined
                 // them, and `Attestation` is in the first.
                 registry_pkg = Some(pkg.original_id);
             }
         }
-        registry_pkg.context("no packages/attestations-v2 entry in the pubfile")
+        registry_pkg.context("no packages/attestations entry in the pubfile")
     }
 
     /// The address with this label.

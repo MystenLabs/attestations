@@ -3,4 +3,4 @@ name = "auditor_a"
 edition = "2024"
 
 [dependencies]
-attestations = { local = "../../packages/attestations-v2" }
+attestations = { local = "../../packages/attestations" }

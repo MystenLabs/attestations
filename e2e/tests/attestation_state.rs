@@ -15,11 +15,11 @@ use sui_sdk_types::Address;
 
 /// The snapshot's header, for whoever reads it.
 const DESCRIPTION: &str = "\
-The attestation state that lives on the localnet once e2e/run.sh has run, on \
-attestations-v2. For each subject: how many registry events name it, and the \
-attestations at its address, derived off-chain from the registry and subject \
-ids, split into live and revoked by `revoked_at_ms`, with their data and \
-rendered Display; then every registry event, in order. Ids are replaced with names: a package's directory name, \
+The attestation state that lives on the localnet once e2e/run.sh has run. For \
+each subject: how many registry events name it, and the attestations at its \
+address, derived off-chain from the registry and subject ids, split into live \
+and revoked by `revoked_at_ms`, with their data and rendered Display; then \
+every registry event, in order. Ids are replaced with names: a package's directory name, \
 `name@vN` for version N of an upgraded package, or a label from the test. A \
 line starting with `!!` marks an inconsistency.";
 

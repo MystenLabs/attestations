@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copy examples/auditor to <dest>, with its registry dependency pointed at this
-# checkout's packages/attestations-v2.
+# checkout's packages/attestations.
 #
 # The template depends on the registry by its MVR name, which resolves to the
 # package published on testnet. Built in place, it is therefore tested against
@@ -22,7 +22,7 @@ if [[ -e "$dest" ]]; then
 fi
 
 mvr_dep='attestations = { r.mvr = "@mysten/attestations" }'
-local_dep="attestations = { local = \"$REPO_ROOT/packages/attestations-v2\" }"
+local_dep="attestations = { local = \"$REPO_ROOT/packages/attestations\" }"
 
 cp -R "$TEMPLATE" "$dest"
 # The lock pins the MVR-resolved registry; let the copy resolve its own.
