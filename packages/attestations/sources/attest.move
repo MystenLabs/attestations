@@ -146,4 +146,13 @@ public fun subject<T: store>(self: &Attestation<T>): ID { self.subject }
 public fun data<T: store>(self: &Attestation<T>): &T { &self.data }
 
 #[test_only]
+public fun created_at_ms<T: store>(self: &Attestation<T>): u64 { self.created_at_ms }
+
+#[test_only]
 public fun revoked_at_ms<T: store>(self: &Attestation<T>): Option<u64> { self.revoked_at_ms }
+
+#[test_only]
+public fun attested_subject<T>(self: &Attested<T>): ID { self.subject }
+
+#[test_only]
+public fun revoked_subject<T>(self: &Revoked<T>): ID { self.subject }
