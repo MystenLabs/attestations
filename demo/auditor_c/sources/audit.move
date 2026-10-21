@@ -56,11 +56,11 @@ entry fun register_audit_display(
         ],
         vector[
             b"Auditor C audit".to_string(),
-            b"{inner.description}".to_string(),
-            b"{inner.report_url}".to_string(),
-            b"{inner.report_hash}".to_string(),
+            b"{data.description}".to_string(),
+            b"{data.report_url}".to_string(),
+            b"{data.report_hash}".to_string(),
             b"https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg".to_string(),
-            b"{inner.published_at_ms:ts}".to_string(),
+            b"{data.published_at_ms:ts}".to_string(),
         ],
         ctx,
     );

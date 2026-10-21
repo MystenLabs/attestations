@@ -55,11 +55,11 @@ public fun register_audit_v2_display(
         ],
         vector[
             b"Audit attestation (v2)".to_string(),
-            b"{inner.description}".to_string(),
-            b"{inner.report_url}".to_string(),
+            b"{data.description}".to_string(),
+            b"{data.report_url}".to_string(),
             b"https://example.com/auditor-icon.svg".to_string(),
-            b"{inner.published_at_ms:ts}".to_string(),
-            b"{inner.score}/100".to_string(),
+            b"{data.published_at_ms:ts}".to_string(),
+            b"{data.score}/100".to_string(),
         ],
         ctx,
     );

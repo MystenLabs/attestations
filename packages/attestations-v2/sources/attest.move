@@ -24,7 +24,7 @@ public struct Registry has key {
 /// T stands for attestation data, eg `Audit { name: String, url: String }`.
 public struct Attestation<T: store> has key {
     id: UID,
-    inner: T,
+    data: T,
     package: ID,
     created_at_ms: u64,
     revoked_at_ms: Option<u64>,
@@ -44,7 +44,7 @@ public fun attest<T: store>(
     r: &Registry,
     _: internal::Permit<T>,
     package: ID,
-    inner: T,
+    data: T,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
@@ -52,7 +52,7 @@ public fun attest<T: store>(
     transfer::transfer(
         Attestation {
             id: object::new(ctx),
-            inner,
+            data,
             package,
             created_at_ms: clock.timestamp_ms(),
             revoked_at_ms: option::none(),
@@ -139,7 +139,7 @@ public fun init_for_testing(ctx: &mut TxContext) {
 public fun package<T: store>(self: &Attestation<T>): ID { self.package }
 
 #[test_only]
-public fun inner<T: store>(self: &Attestation<T>): &T { &self.inner }
+public fun data<T: store>(self: &Attestation<T>): &T { &self.data }
 
 #[test_only]
 public fun revoked_at_ms<T: store>(self: &Attestation<T>): Option<u64> { self.revoked_at_ms }

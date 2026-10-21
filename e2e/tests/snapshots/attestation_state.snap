@@ -8,7 +8,7 @@ address (no object)
 
 live
   auditor_a@v1::audit::Audit
-    inner:
+    data:
       description: Dependency audit — no findings
       report_url: https://audits.example.com/dependency-v1.pdf
       report_hash: sha256:b3c7e89209978ba5144036238115b0b8f1e0b4dda01bb195584e36a1ce67f046
@@ -21,7 +21,7 @@ live
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
   auditor_c::audit::Audit
-    inner:
+    data:
       description: Dependency audit — clean
       report_url: https://auditor-c.example/dependency.pdf
       report_hash: null
@@ -43,7 +43,7 @@ address (no object)
 
 live
   auditor_a@v2::audit_v2::AuditV2
-    inner:
+    data:
       description: Subject audit (v2) — passed
       report_url: https://audits.example.com/subject-v1.pdf
       published_at_ms: 1748736000000
@@ -57,11 +57,11 @@ live
       score: 95/100
       methodology: https://auditor-a.example/methodology
   auditor_a@v2::audit_v2::InternalNote
-    inner:
+    data:
       text: no Display registered
     display: none
   auditor_b::audit::Audit
-    inner:
+    data:
       description: Auditor B review
       report_url: https://auditor-b.example/r.pdf
       report_hash: null
@@ -74,7 +74,7 @@ live
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
   auditor_c::audit::Audit
-    inner:
+    data:
       description: Subject audit — no critical findings
       report_url: https://auditor-c.example/subject.pdf
       report_hash: sha256:09ddf4f54a91585702b79c871be8232e7fb93e3965d49dc88aaecf973bb6f91d
@@ -89,7 +89,7 @@ live
 
 revoked
   auditor_a@v1::audit::Audit
-    inner:
+    data:
       description: Subject audit (v1) — superseded
       report_url: https://audits.example.com/subject-v1.pdf
       report_hash: null
@@ -108,7 +108,7 @@ address (no object)
 
 live
   auditor::audit::Audit
-    inner:
+    data:
       description: Walkthrough report — kept
       report_url: https://auditor.example/kept.pdf
       report_hash: sha256:415a18ef6736ae1aadeb8363b8a9728814912b124b954fe1b9bb579782086117
@@ -123,7 +123,7 @@ live
 
 revoked
   auditor::audit::Audit
-    inner:
+    data:
       description: Walkthrough report — revoked
       report_url: https://auditor.example/revoked.pdf
       report_hash: null

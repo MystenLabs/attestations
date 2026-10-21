@@ -275,7 +275,7 @@ fn render_attestation(
     {
         lines.push("    !! revoked_at_ms is before created_at_ms".to_string());
     }
-    lines.extend(render_fields("inner", json["inner"].as_object(), names));
+    lines.extend(render_fields("data", json["data"].as_object(), names));
 
     let display = attestation.display.as_ref().and_then(Value::as_object);
     lines.extend(render_fields("display", display, names));
