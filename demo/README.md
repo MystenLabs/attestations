@@ -53,7 +53,7 @@ one from the untrusted `auditor_b`. Keep this in sync with `demo.sh`.
 
 Attestations come from `auditor_a` and `auditor_c` (both trusted) except the
 Auditor B one (untrusted).
-"Active"/"Revoked" is the on-chain status — which box (active or revoked) owns it.
+"Active"/"Revoked" is the on-chain status: an attestation is revoked once its `revoked_at_ms` is set.
 
 **What a consumer sees.** A consumer that trusts `auditor_a` and `auditor_c` but
 not `auditor_b` sees, on `@demo/subject`, Auditor A's **`AuditV2` (score 95)** and
@@ -63,5 +63,5 @@ filtered out by attester *identity* (same type, different package), and the
 `@demo/dependency` has two versions — v1 is audited (Active) but v2 (the latest)
 is left unaudited — so the Security page shows the latest version with a "no
 published audits" warning alongside the audited older version.
-Revoked attestations remain readable from each subject's revoked box address — a consumer
+Revoked attestations remain readable at each subject's address, with `revoked_at_ms` set — a consumer
 typically lists them separately so they don't read as endorsements.

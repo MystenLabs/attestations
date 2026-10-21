@@ -13,7 +13,7 @@ Display-field **conventions** rather than additional Move types.
 
 ```
 packages/
-  attestations/       — the only deployable: Registry, Box, Attestation
+  attestations/       — the only deployable: Registry, Attestation
 examples/             — reusable schema patterns for third-party attesters
   auditor/            — reference auditor schema (`Audit` + `AuditAdminCap`)
 demo/                 — fixtures that exist only to drive the local demo (see demo/README.md)
@@ -23,7 +23,7 @@ demo/                 — fixtures that exist only to drive the local demo (see 
   dependency_example/ — a subject; dependency of subject_example
   subject_example/    — the browsed subject (depends on dependency_example)
   scripts/            — demo orchestration: run-demo.sh, test-publish.sh, demo.sh
-scripts/              — reusable CLI ops: create-box, attest-audit, revoke-audit
+scripts/              — reusable CLI ops: attest-audit, revoke-audit
 CONVENTIONS.md        — Display-field conventions (expires_at, …)
 FUTURE-EXTENSIONS.md  — design memos for surfaces deliberately deferred from v0
 ```
@@ -31,22 +31,21 @@ FUTURE-EXTENSIONS.md  — design memos for surfaces deliberately deferred from v
 ## Concepts
 
 ```
-Registry (shared singleton)
-  ├── active box  (a claimed `Box`)   ──owns──▶ un-revoked Attestation<T> (TTO)
-  └── revoked address (no object)     ──owns──▶ revoked Attestation<T>
+Registry (shared singleton; holds the anchor UIDs that `revoke` claims)
+  └── derive_address(registry, subject) ──owns──▶ Attestation<T> (TTO), live or revoked
 ```
 
-A `Registry` is a shared singleton, parent of two derived box addresses per
-subject — *active* and *revoked*. Each address is
-`derived_object::derive_address(registry, BoxKey { subject, revoked })` —
-computable off-chain — so consumers enumerate every un-revoked attestation about
-a subject via `getOwnedObjects(active_box, filter={StructType: …})`, with
-server-side type filtering. An attestation carries no status field: it is
-revoked iff it lives at the revoked address.
+A `Registry` is a shared singleton. Each subject's attestations live at one
+address, `derived_object::derive_address(registry, subject)`, which consumers
+compute off-chain from the registry and subject ids. They list a subject's
+attestations via `getOwnedObjects(address, filter={StructType: …})`, with
+server-side type filtering. Each attestation records its own status: it is
+revoked iff its `revoked_at_ms` field is set.
 
-Only the active address holds a claimed `Box` object, because `revoke` needs a
-`&mut UID` there to `transfer::receive` from. Nothing ever receives *from* the
-revoked address, so it needs no object.
+`revoke` needs a `&mut UID` at the subject's address to `transfer::receive`
+from. The first `revoke` for a subject claims that UID and keeps it in the
+Registry's `anchors` table, so no object exists at the address, and no setup
+transaction comes before the first revoke.
 
 The key design feature is that **the schema package has complete control over
 its attestations.** `attest`, `revoke`, and `register_display` are all gated by
@@ -55,7 +54,7 @@ package can issue, revoke, or set the Display for `Attestation<T>`. The
 recorded attester is therefore `T`'s package — bound to the type at compile
 time, not denormalized into a field — and each schema defines its own revocation
 authority (an admin cap, a per-attestation bearer cap, or none at all).
-Revocation moves an attestation from the subject's active box to its revoked
+Revocation sets an attestation's `revoked_at_ms` and leaves it at its subject's
 address. Time-based effectiveness (expiration) and other cross-cutting concerns
 sit in the Display layer per `CONVENTIONS.md` — the registry itself stays minimal.
 ("Negative" attestations — vulnerability disclosures that propagate from a
@@ -90,12 +89,12 @@ every pull request.
 
 ## Running the demo
 
-The demo creates Boxes for two real subjects (`dependency_example` and the
-`subject_example` that depends on it), issues audits (an `Audit` on the
-dependency; an `AuditV2` and a v1 `Audit` on the subject) plus two
-attestations a trust consumer must filter out, then revokes the dependency's
-audit and the subject's v1 `Audit` — showing each leave its active box (the
-subject keeps its `AuditV2` as the live signal).
+The demo attests about two real subjects (`dependency_example` and the
+`subject_example` that depends on it): an `Audit` on the dependency, an
+`AuditV2` and a v1 `Audit` on the subject, and two attestations a trust consumer
+must filter out. It then revokes the subject's v1 `Audit`, which stays at the
+subject's address with `revoked_at_ms` set (the subject keeps its `AuditV2` as
+the live signal).
 
 ### One-command (recommended for iteration)
 
@@ -158,9 +157,9 @@ Then run the demo (it reads `Pub.localnet.toml` and `REGISTRY_ID`):
 bash demo/scripts/demo.sh
 ```
 
-`demo/scripts/demo.sh` composes the `scripts/` CLI ops (create-box, attest-audit,
-revoke-audit): it creates the boxes, issues the audits, revokes two of them, and
-writes `demo-ids.json` for the MVR seeder, printing each step's object ids.
+`demo/scripts/demo.sh` composes the `scripts/` CLI ops (attest-audit,
+revoke-audit): it issues the audits, revokes one of them, and writes
+`demo-ids.json` for the MVR seeder, printing each step's object ids.
 
 Options, as environment variables:
 
@@ -172,11 +171,11 @@ Options, as environment variables:
 
 ## Effectiveness
 
-Off-chain consumers decide whether an attestation is *effective*: it must be
-unexpired per the `expires_at` Display convention (if present). Revocation is
-handled upstream by box membership — a revoked attestation lives at the revoked
-address, not the active box — so it isn't part of that check. See `CONVENTIONS.md`
-for the conventions and their evaluation rules.
+Off-chain consumers decide whether an attestation is *effective*: its
+`revoked_at_ms` must be none, and it must be unexpired per the `expires_at`
+Display convention (if present). A revoked attestation stays at its subject's
+address, so a consumer that lists the address must check `revoked_at_ms`. See
+`CONVENTIONS.md` for the conventions and their evaluation rules.
 
 ## Further reading
 
