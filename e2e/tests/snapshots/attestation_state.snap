@@ -1,13 +1,14 @@
 ---
 source: tests/attestation_state.rs
-description: "The attestation state that lives on the localnet once e2e/run.sh has run. For each subject: the attestations at its active box and at its revoked address, both derived off-chain from the registry and subject ids, with their data and rendered Display; then every registry event, in order. Ids are replaced with names: a package's directory name, `name@vN` for version N of an upgraded package, or a label from the test. A line starting with `!!` marks an inconsistency."
+description: "The attestation state that lives on the localnet once e2e/run.sh has run, on attestations-v2. For each subject: how many registry events name it, and the attestations at its address, derived off-chain from the registry and subject ids, split into live and revoked by `revoked_at_ms`, with their data and rendered Display; then every registry event, in order. Ids are replaced with names: a package's directory name, `name@vN` for version N of an upgraded package, or a label from the test. A line starting with `!!` marks an inconsistency."
 ---
 == dependency_example@v1 ==
 events: 2 attested, 0 revoked
+address (no object)
 
-active box (attestations::attestations::Box object)
+live
   auditor_a@v1::audit::Audit
-    data:
+    inner:
       description: Dependency audit — no findings
       report_url: https://audits.example.com/dependency-v1.pdf
       report_hash: sha256:b3c7e89209978ba5144036238115b0b8f1e0b4dda01bb195584e36a1ce67f046
@@ -20,7 +21,7 @@ active box (attestations::attestations::Box object)
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
   auditor_c::audit::Audit
-    data:
+    inner:
       description: Dependency audit — clean
       report_url: https://auditor-c.example/dependency.pdf
       report_hash: null
@@ -33,15 +34,16 @@ active box (attestations::attestations::Box object)
       image_url: https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg
       published_at: 2025-06-01T00:00:00Z
 
-revoked address (no object)
+revoked
   (none)
 
 == subject_example ==
 events: 5 attested, 1 revoked
+address (no object)
 
-active box (attestations::attestations::Box object)
+live
   auditor_a@v2::audit_v2::AuditV2
-    data:
+    inner:
       description: Subject audit (v2) — passed
       report_url: https://audits.example.com/subject-v1.pdf
       published_at_ms: 1748736000000
@@ -55,11 +57,11 @@ active box (attestations::attestations::Box object)
       score: 95/100
       methodology: https://auditor-a.example/methodology
   auditor_a@v2::audit_v2::InternalNote
-    data:
+    inner:
       text: no Display registered
     display: none
   auditor_b::audit::Audit
-    data:
+    inner:
       description: Auditor B review
       report_url: https://auditor-b.example/r.pdf
       report_hash: null
@@ -72,7 +74,7 @@ active box (attestations::attestations::Box object)
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
   auditor_c::audit::Audit
-    data:
+    inner:
       description: Subject audit — no critical findings
       report_url: https://auditor-c.example/subject.pdf
       report_hash: sha256:09ddf4f54a91585702b79c871be8232e7fb93e3965d49dc88aaecf973bb6f91d
@@ -85,9 +87,9 @@ active box (attestations::attestations::Box object)
       image_url: https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg
       published_at: 2025-06-01T00:00:00Z
 
-revoked address (no object)
+revoked
   auditor_a@v1::audit::Audit
-    data:
+    inner:
       description: Subject audit (v1) — superseded
       report_url: https://audits.example.com/subject-v1.pdf
       report_hash: null
@@ -102,10 +104,11 @@ revoked address (no object)
 
 == walkthrough_subject ==
 events: 2 attested, 1 revoked
+address (no object)
 
-active box (attestations::attestations::Box object)
+live
   auditor::audit::Audit
-    data:
+    inner:
       description: Walkthrough report — kept
       report_url: https://auditor.example/kept.pdf
       report_hash: sha256:415a18ef6736ae1aadeb8363b8a9728814912b124b954fe1b9bb579782086117
@@ -118,9 +121,9 @@ active box (attestations::attestations::Box object)
       image_url: https://example.com/auditor-icon.svg
       published_at: 2025-06-01T00:00:00Z
 
-revoked address (no object)
+revoked
   auditor::audit::Audit
-    data:
+    inner:
       description: Walkthrough report — revoked
       report_url: https://auditor.example/revoked.pdf
       report_hash: null
@@ -135,11 +138,12 @@ revoked address (no object)
 
 == dependency_example@v2 ==
 events: 0 attested, 0 revoked
+address (no object)
 
-active box (no object)
+live
   (none)
 
-revoked address (no object)
+revoked
   (none)
 
 == events, in order ==

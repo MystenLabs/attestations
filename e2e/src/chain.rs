@@ -1,4 +1,4 @@
-//! Reading the localnet the way a consumer would: box addresses derived
+//! Reading the localnet the way a consumer would: subject addresses derived
 //! off-chain, and what they own read through GraphQL.
 
 use std::time::Duration;
@@ -59,16 +59,15 @@ pub struct Attestation {
     pub display_errors: Option<Value>,
 }
 
-/// What is at a subject's two box addresses.
+/// What is at a subject's address: every attestation about it, split by
+/// whether `revoked_at_ms` is set.
 pub struct SubjectState {
-    /// The attestations at the active box.
-    pub active: Vec<Attestation>,
-    /// The attestations at the revoked address.
+    /// The attestations with no `revoked_at_ms`.
+    pub live: Vec<Attestation>,
+    /// The attestations with `revoked_at_ms` set.
     pub revoked: Vec<Attestation>,
-    /// The type of the object at the active box address, if there is one.
-    pub active_object: Option<TypeTag>,
-    /// The type of the object at the revoked address, if there is one.
-    pub revoked_object: Option<TypeTag>,
+    /// The type of the object at the address, if there is one.
+    pub object: Option<TypeTag>,
 }
 
 pub struct Chain {
@@ -176,28 +175,19 @@ impl Chain {
         }
     }
 
-    /// What is at `subject`'s active box and revoked address.
+    /// What is at `subject`'s address.
     pub async fn subject_state(
         &self,
         registry: Address,
         registry_pkg: Address,
         subject: Address,
     ) -> Result<SubjectState> {
-        const BOXES: &str = graphql_query!(
-            "query SubjectBoxes(
-                $active: SuiAddress!,
-                $revoked: SuiAddress!,
-                $type: String!,
-                $first: Int,
-            ) {
-                activeObject: object(address: $active) {
+        const ANCHOR: &str = graphql_query!(
+            "query SubjectAnchor($anchor: SuiAddress!, $type: String!, $first: Int) {
+                anchorObject: object(address: $anchor) {
                     asMoveObject { contents { ...FMoveValue } }
                 }
-                revokedObject: object(address: $revoked) {
-                    asMoveObject { contents { ...FMoveValue } }
-                }
-                active: address(address: $active) { ...FAttestations }
-                revoked: address(address: $revoked) { ...FAttestations }
+                attestations: address(address: $anchor) { ...FAttestations }
             }",
             @"fragments/FAttestations.graphql",
             @"fragments/FMoveValue.graphql",
@@ -206,36 +196,32 @@ impl Chain {
 
         #[derive(Response)]
         struct Response {
-            #[field(path = "activeObject:object?.asMoveObject?.contents")]
-            active_object: Option<MoveValue>,
-            #[field(path = "revokedObject:object?.asMoveObject?.contents")]
-            revoked_object: Option<MoveValue>,
-            #[field(path = "active:address.objects.pageInfo")]
-            active_page: PageInfo,
-            #[field(path = "active:address.objects.nodes[]")]
-            active: Vec<Attestation>,
-            #[field(path = "revoked:address.objects.pageInfo")]
-            revoked_page: PageInfo,
-            #[field(path = "revoked:address.objects.nodes[]")]
-            revoked: Vec<Attestation>,
+            #[field(path = "anchorObject:object?.asMoveObject?.contents")]
+            object: Option<MoveValue>,
+            #[field(path = "attestations:address.objects.pageInfo")]
+            page: PageInfo,
+            #[field(path = "attestations:address.objects.nodes[]")]
+            attestations: Vec<Attestation>,
         }
 
         let variables = json!({
-            "active": box_address(registry, registry_pkg, subject, false)?,
-            "revoked": box_address(registry, registry_pkg, subject, true)?,
+            "anchor": anchor_address(registry, subject)?,
             "type": format!("{registry_pkg}::attestations::Attestation"),
             "first": PAGE,
         });
-        let boxes: Response = self.query(BOXES, variables).await?;
+        let anchor: Response = self.query(ANCHOR, variables).await?;
         ensure!(
-            !boxes.active_page.has_next_page && !boxes.revoked_page.has_next_page,
+            !anchor.page.has_next_page,
             "more than {PAGE} attestations at one address; the e2e needs paging"
         );
+        let (revoked, live) = anchor
+            .attestations
+            .into_iter()
+            .partition(|a| !a.contents.json["revoked_at_ms"].is_null());
         Ok(SubjectState {
-            active: boxes.active,
-            revoked: boxes.revoked,
-            active_object: boxes.active_object.map(|value| value.type_),
-            revoked_object: boxes.revoked_object.map(|value| value.type_),
+            live,
+            revoked,
+            object: anchor.object.map(|value| value.type_),
         })
     }
 
@@ -248,21 +234,13 @@ impl Chain {
     }
 }
 
-/// The address of a subject's active box (`revoked: false`) or revoked address
-/// (`revoked: true`): `derived_object::derive_address(registry, BoxKey {
-/// subject, revoked })`.
-pub fn box_address(
-    registry: Address,
-    registry_pkg: Address,
-    subject: Address,
-    revoked: bool,
-) -> Result<Address> {
-    // `BoxKey` is defined in the registry package's first version. In BCS it is
-    // the subject's 32 bytes followed by the bool.
-    let key_type: TypeTag = format!("{registry_pkg}::attestations::BoxKey").parse()?;
-    let mut key = subject.as_bytes().to_vec();
-    key.push(u8::from(revoked));
-    Ok(registry.derive_object_id(&key_type, &key))
+/// The address every attestation about `subject` is owned by:
+/// `derived_object::derive_address(registry, subject)`. The key is a plain
+/// `0x2::object::ID`, so unlike the registry's own types it needs no package id.
+pub fn anchor_address(registry: Address, subject: Address) -> Result<Address> {
+    // In BCS an `ID` is just its 32 bytes.
+    let key_type: TypeTag = "0x2::object::ID".parse()?;
+    Ok(registry.derive_object_id(&key_type, subject.as_bytes()))
 }
 
 /// The struct tag of `type_`, which must be a struct type.
