@@ -5,7 +5,7 @@
 # demo can render attestations.
 #
 # Packages (publish order matters — deps before dependents):
-#   packages/attestations  -> shared Registry singleton (created in init)
+#   packages/attestations-v2 -> shared Registry singleton (created in init)
 #   demo/auditor_a         -> Audit schema (later upgraded to add AuditV2)
 #   demo/auditor_b             -> a second auditor (Auditor B), NOT in the trusted set
 #   demo/dependency_example        -> a subject, and a dependency of subject_example
@@ -79,7 +79,7 @@ for block in content.split('[[published]]'):
 PY
 }
 
-for pkg in packages/attestations demo/auditor_a demo/auditor_b demo/auditor_c demo/dependency_example demo/subject_example; do
+for pkg in packages/attestations-v2 demo/auditor_a demo/auditor_b demo/auditor_c demo/dependency_example demo/subject_example; do
     name=$(basename "$pkg")
     echo
     echo "▶ test-publish $name"
@@ -95,7 +95,7 @@ for pkg in packages/attestations demo/auditor_a demo/auditor_b demo/auditor_c de
     echo "  ok"
     # --json writes the result object to stdout (build logs go to stderr), so jq
     # reads it straight from json_out.
-    if [[ "$name" == "attestations" ]]; then
+    if [[ "$name" == "attestations-v2" ]]; then
         # init creates the shared Registry.
         REGISTRY_ID=$(jq -r '
             first(.objectChanges[]?

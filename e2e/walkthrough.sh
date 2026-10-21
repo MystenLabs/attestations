@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Follow examples/auditor/README.md's onboarding guide on a localnet, the way a
 # new auditor would: publish a copy of the template, register its Display,
-# publish two reports about a subject, create the subject's box, and revoke one
-# of the reports. Also check that the wrong registry reference and a caller
+# publish two reports about a subject, and revoke one of the reports. Also check that the wrong registry reference and a caller
 # who does not own the admin cap are rejected before they can change that state.
 #
 # The copy's registry dependency points at this checkout's registry
@@ -24,14 +23,6 @@ WORK="${1:?usage: walkthrough.sh <work-dir>}"
 
 DISPLAY_REGISTRY=0xd    # the system display registry
 PUBDATE=1748736000000   # 2025-06-01, fixed so the snapshot is stable
-
-REGPKG=$(python3 - "$PUBFILE" <<'PY'
-import sys, tomllib
-for pkg in tomllib.load(open(sys.argv[1], "rb"))["published"]:
-    if pkg["source"]["local"].endswith("/packages/attestations"):
-        print(pkg["published-at"])
-PY
-)
 
 copy="$WORK/auditor"
 echo "▶ copy examples/auditor, pointed at this checkout's registry"
@@ -62,8 +53,7 @@ SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
     "Walkthrough report — revoked" "https://auditor.example/revoked.pdf" "$PUBDATE")
 echo "  kept $KEPT, to revoke $SUPERSEDED"
 
-echo "▶ create the subject's box, then revoke one report (guide: revoking)"
-BOX=$(bash "$OPS/create-box.sh" "$REGPKG" "$REGISTRY" "$SUBJECT")
+echo "▶ revoke one report (guide: revoking)"
 
 # These failures happen at transaction validation, outside Move unit tests.
 # Require the specific error as well as a failing exit status, so a network,
@@ -88,7 +78,7 @@ expect_rejection() {
 # A real shared object of another type cannot substitute for the Registry.
 expect_rejection wrong-registry-reference 'CommandArgumentError \{ arg_idx: 1, kind: TypeMismatch \} in command 0' \
     --move-call "$PKG::audit::attest_audit" "@$CAP" "@$DISPLAY_REGISTRY" "@$SUBJECT" \
-    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE"
+    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE" @0x6
 
 # Give a second signer its own gas, but leave the AuditAdminCap with the publisher.
 # Keep the active address unchanged so the successful revoke below uses the owner.
@@ -100,12 +90,12 @@ CAP_OWNERSHIP_ERROR="Object $CAP is owned by account address .*, but given owner
 expect_rejection unauthorized-attest "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
     --move-call "$PKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" \
-    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE"
+    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE" @0x6
 expect_rejection unauthorized-revoke "$CAP_OWNERSHIP_ERROR" \
     --sender "@$UNAUTHORIZED" \
-    --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$BOX" "@$SUPERSEDED"
+    --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" "@$SUPERSEDED" @0x6
 
 # The authorized operation still succeeds after the rejected attempts. The final
 # snapshot also checks that they emitted no registry events or extra attestations.
-bash "$OPS/revoke-audit.sh" "$PKG" "$CAP" "$BOX" "$SUPERSEDED"
-echo "  revoked $SUPERSEDED from box $BOX"
+bash "$OPS/revoke-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" "$SUPERSEDED"
+echo "  revoked $SUPERSEDED"
