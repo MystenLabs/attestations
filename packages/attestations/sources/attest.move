@@ -93,6 +93,22 @@ fun init(ctx: &mut TxContext) {
     });
 }
 
+/// Create and share the `Display<Attestation<T>>` for schema `T`, with one
+/// entry per pair of `fields` and `values`. Gated by `Permit<T>`, so only `T`'s
+/// defining module can call it. `display_registry` allows one `Display` per
+/// type, so a second call for the same `T` aborts with
+/// `display_registry::EDisplayAlreadyExists`.
+///
+/// `fields` and `values` pair up by index and must have the same length; if
+/// `fields` repeats a name, the later value replaces the earlier one. Each value
+/// is a Display template over the fields of `Attestation<T>`: `{subject}`,
+/// `{created_at_ms}`, `{revoked_at_ms}`, and the schema's fields under
+/// `{data.<field>}` (for example `{data.description}`). `CONVENTIONS.md` lists
+/// the field names that consumers recognize and what each one means.
+///
+/// The function transfers the `DisplayCap` to the Registry's address, where only
+/// `add_display_field` can receive it, so the `Display` can gain fields but no
+/// caller can change or remove one.
 public fun register_display<T: store>(
     registry: &Registry,
     display_registry: &mut DisplayRegistry,
@@ -109,13 +125,19 @@ public fun register_display<T: store>(
     fields.zip_do!(values, |field, value| display.set(&cap, field, value));
     display.share();
 
-    // Park the `DisplayCap` on the Registry. It's kept (not destroyed) so the
-    // schema can later append fields via `add_display_field`, which receives
-    // it, adds, and re-parks. No public path here exposes `set`-overwrite,
-    // `unset`, or `clear`, so the Display is effectively append-only.
     transfer::public_transfer(cap, registry.id.to_address());
 }
 
+/// Add `fields` to the `Display<Attestation<T>>` that `register_display`
+/// created, with the values in `values`, paired by index. Gated by `Permit<T>`,
+/// like `register_display`. Fields can only be added: the call aborts with
+/// `EFieldExists` if a name in `fields` is already set, including a name that
+/// appears twice in `fields`.
+///
+/// `rcv` is the `DisplayCap<Attestation<T>>` that `register_display`
+/// transferred to the Registry's address. Its id is in that transaction's
+/// effects, and the Registry's address owns no other `DisplayCap` for `T`. The
+/// function receives the cap, adds the fields, and transfers the cap back.
 public fun add_display_field<T: store>(
     registry: &mut Registry,
     display: &mut Display<Attestation<T>>,
