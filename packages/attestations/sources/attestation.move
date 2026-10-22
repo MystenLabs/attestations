@@ -1,6 +1,13 @@
-/// Subjects are identifiable by their ID.
+/// Typed attestations about subjects identified by `ID`.
 ///
-/// A derived address is used for each subject to store / revoke attestations.
+/// `Attestation<T>` stores a schema's claim and its creation and revocation times.
+/// Issuance, revocation, and Display management require a `Permit<T>`, which only
+/// `T`'s defining module can mint. Each schema defines its own authorization policy.
+///
+/// All attestations for a subject live at one address derived from the shared
+/// `Registry` and the subject's ID. Revocation sets `revoked_at_ms` once and keeps
+/// the attestation at that address. Consumers enumerate the address by type and
+/// check `revoked_at_ms` to distinguish live claims from revoked ones.
 module attestations::attestations;
 
 use std::string::String;
@@ -43,8 +50,15 @@ public struct Revoked<phantom T> has copy, drop {
     subject: ID,
 }
 
+/// Create an `Attestation<T>` containing `data` about `subject` and emit `Attested<T>`.
+/// Requires a `Permit<T>` minted by `T`'s defining module under the schema's policy.
+///
+/// Sets `created_at_ms` from `clock` and leaves `revoked_at_ms` unset. Transfers
+/// the attestation directly to the address derived from `registry` and `subject`, without
+/// returning it or its ID. No per-subject setup is required, and `subject` need not
+/// identify an existing on-chain object.
 public fun attest<T: store>(
-    r: &Registry,
+    registry: &Registry,
     _: internal::Permit<T>,
     subject: ID,
     data: T,
@@ -60,13 +74,13 @@ public fun attest<T: store>(
             created_at_ms: clock.timestamp_ms(),
             revoked_at_ms: option::none(),
         },
-        derived_object::derive_address(r.id.to_inner(), subject),
+        derived_object::derive_address(registry.id.to_inner(), subject),
     );
 }
 
 /// Revoke an attestation from the registry.
 public fun revoke<T: store>(
-    r: &mut Registry,
+    registry: &mut Registry,
     _: internal::Permit<T>,
     subject: ID,
     attestation: Receiving<Attestation<T>>,
@@ -74,16 +88,19 @@ public fun revoke<T: store>(
     _ctx: &mut TxContext,
 ) {
     // If anchor hasn't yet been created, create on request.
-    if (!r.anchors.contains(subject)) {
-        r.anchors.add(subject, derived_object::claim(&mut r.id, subject));
+    if (!registry.anchors.contains(subject)) {
+        registry.anchors.add(subject, derived_object::claim(&mut registry.id, subject));
     };
 
-    let mut attestation = transfer::receive(&mut r.anchors[subject], attestation);
+    let mut attestation = transfer::receive(&mut registry.anchors[subject], attestation);
     assert!(subject == attestation.subject);
     assert!(attestation.revoked_at_ms.is_none(), EAlreadyRevoked);
     attestation.revoked_at_ms.fill(clock.timestamp_ms());
     event::emit(Revoked<T> { subject });
-    transfer::transfer(attestation, derived_object::derive_address(r.id.to_inner(), subject));
+    transfer::transfer(
+        attestation,
+        derived_object::derive_address(registry.id.to_inner(), subject),
+    );
 }
 
 /// Create and share the `Display<Attestation<T>>` for schema `T`, with one
