@@ -60,7 +60,7 @@ undo_customizations() {
     esac
 }
 
-for copy in auditor_a auditor_b auditor_c; do
+for copy in auditor_a auditor_b auditor_c attestations-demo-auditor; do
     copy_src="$REPO_ROOT/demo/$copy/sources/audit.move"
     if diff -u --label "examples/auditor/sources/audit.move" \
             --label "demo/$copy/sources/audit.move (normalized)" \
