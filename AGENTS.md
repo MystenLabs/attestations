@@ -8,10 +8,10 @@ reading the code.
 
 A typed attestation registry for Sui. `Attestation<T>` wraps an arbitrary schema
 `T`, and only `T`'s defining module can mint the `Permit<T>` that authorizes
-`attest`, `revoke`, and `register_display`. Each subject has one claimed `Box`
-(the active box) plus a derived revoked address; an attestation's status is
-simply which of the two owns it. Rationale is in `DESIGN.md`; Display field
-conventions in `CONVENTIONS.md`.
+`attest`, `revoke`, and `register_display`. Each subject's attestations live at
+one address derived from the registry and the subject; `revoke` sets an
+attestation's `revoked_at_ms` and leaves it there. Rationale is in `DESIGN.md`;
+Display field conventions in `CONVENTIONS.md`.
 
 ## Layout
 
@@ -20,7 +20,9 @@ conventions in `CONVENTIONS.md`.
 | `packages/attestations` | the core registry package — the only thing that ships |
 | `examples/auditor` | reference schema plus the new-attester onboarding guide (`README.md`); built and tested standalone, **not** part of the demo |
 | `demo/*` | independently published copies used by the demo, each with its own package identity |
-| `scripts/`, `demo/scripts/` | publish helpers and the local demo stack |
+| `scripts/`, `demo/scripts/` | publish helpers, the local demo stack, and the `check-*.sh` checks |
+| `e2e/` | end-to-end test on a fresh localnet (`run.sh`), and the Rust snapshot test it ends with |
+| `.github/` | CI, which runs every check below on each PR and push to `main` |
 
 `examples/` versus `demo/` is a real distinction, not duplication. The demo needs
 several *distinct on-chain packages* — two trusted auditors and one untrusted —
@@ -29,13 +31,40 @@ to show trust filtering, while `examples/auditor` has to stay a clean template.
 ## Build and test
 
 ```sh
-bash scripts/check.sh                          # every Move package
+bash scripts/check.sh                          # lint, build, and test every Move package
 bash scripts/check.sh packages/attestations    # just the ones named
+bash scripts/check-format.sh                   # Move formatting; --write to fix
+bash scripts/check-template.sh                 # examples/auditor against this checkout
+bash e2e/run.sh                                # end to end on a fresh localnet
 ```
 
+CI (`.github/workflows/ci.yml`) runs all of these, with the latest `sui` from
+`suiup`.
+
 `sui move test` builds the package and runs its tests, so that single command
-covers packages with and without tests. `check.sh` attempts every package even
-if one fails, and exits nonzero if any did.
+covers packages with and without tests. `check.sh` runs it with `--lint
+--warnings-are-errors`, so a lint warning fails the package. It attempts every
+package even if one fails, and exits nonzero if any did.
+
+`check-format.sh` needs prettier-move (`npm i -g prettier
+@mysten/prettier-plugin-move`); its settings are in `.prettierrc`.
+
+`examples/auditor` depends on the registry by its MVR name, which resolves to the
+*published* package, so built in place it can't see registry changes that
+aren't published yet. `check.sh` therefore skips it by default (`bash
+scripts/check.sh examples/auditor` builds it as published), and
+`check-template.sh` builds a copy pointed at this checkout's registry instead,
+then checks that `demo/auditor_*` are still copies of the template.
+
+`e2e/run.sh` owns the localnet: it publishes everything and runs the demo and
+the template's onboarding guide. Then it runs `cargo test` in `e2e/`, a small
+Rust crate that reads the resulting on-chain state the way a consumer would
+(subject addresses derived with `sui-sdk-types`) and checks it, rendered as text,
+against the insta snapshot `e2e/tests/snapshots/attestation_state.snap`. The
+test needs the localnet, so run it through `run.sh`, not alone. When a change to
+that state is intended, the run leaves the new snapshot for `cargo insta review
+--manifest-path e2e/Cargo.toml`; commit the accepted `.snap`. Beside a localnet
+already on the default ports, add `PORT_OFFSET=10000`.
 
 These packages pin env-specific dependencies, so a bare `sui move test` fails
 with "could not determine the correct dependencies"; it needs `--build-env
@@ -85,6 +114,12 @@ The frontend lives in a different repo (`MystenLabs/mvr`). The chain side writes
 - Background jobs need `set -m` for `kill -TERM -$pid` to take the whole process
   group. Otherwise `kill` hits `cargo` or `pnpm` and orphans the child that is
   actually holding the port.
+- **Stop `sui start` with `SIGINT`, not `SIGTERM`.** With `--with-graphql` it runs
+  a temporary Postgres for its indexer. `SIGINT` shuts that down too; `SIGTERM`
+  exits and leaves it running.
+- **Reformatting a published module changes its bytecode.** `#[error]` abort
+  codes encode the source line of the abort, so any line shift changes them, and
+  a rebuild no longer byte-matches the deployed package.
 
 ## Further reading
 

@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Follow examples/auditor/README.md's onboarding guide on a localnet, the way a
+# new auditor would: publish a copy of the template, register its Display,
+# publish two reports about a subject, and revoke one of the reports. Also check
+# that the wrong registry reference, a caller who does not own the admin cap,
+# and a revoke of another schema's attestation are rejected before they can
+# change that state.
+#
+# The copy's registry dependency points at this checkout's registry
+# (scripts/copy-template.sh), which test-publish finds in PUBFILE. DEMO_IDS is
+# the demo's demo-ids.json, which names the other schema's attestation.
+#
+# e2e/run.sh calls this after the demo, with the sui client already on the
+# localnet and funded.
+#
+# Usage: PUBFILE=... REGISTRY_ID=... SUBJECT=... DEMO_IDS=... bash e2e/walkthrough.sh <work-dir>
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OPS="$REPO_ROOT/scripts"
+SUI="${SUI:-sui}"
+PUBFILE="${PUBFILE:?PUBFILE is required}"
+REGISTRY="${REGISTRY_ID:?REGISTRY_ID is required}"
+SUBJECT="${SUBJECT:?SUBJECT is required}"
+DEMO_IDS="${DEMO_IDS:?DEMO_IDS is required}"
+WORK="${1:?usage: walkthrough.sh <work-dir>}"
+
+DISPLAY_REGISTRY=0xd    # the system display registry
+PUBDATE=1748736000000   # 2025-06-01, fixed so the snapshot is stable
+
+copy="$WORK/auditor"
+echo "▶ copy examples/auditor, pointed at this checkout's registry"
+bash "$OPS/copy-template.sh" "$copy"
+
+echo "▶ publish it (guide step 2)"
+# --json writes the result to stdout and build logs to stderr.
+if ! (cd "$copy" &&
+    "$SUI" client test-publish --build-env testnet --pubfile-path "$PUBFILE" --json) \
+    >"$WORK/auditor-publish.json" 2>"$WORK/auditor-publish.log"; then
+    cat "$WORK/auditor-publish.log" "$WORK/auditor-publish.json"
+    exit 1
+fi
+PKG=$(jq -r 'first(.objectChanges[] | select(.type == "published") | .packageId)' "$WORK/auditor-publish.json")
+CAP=$(jq -r 'first(.objectChanges[] | select(.objectType // "" | endswith("::audit::AuditAdminCap")) | .objectId)' \
+    "$WORK/auditor-publish.json")
+echo "  package $PKG, AuditAdminCap $CAP"
+
+echo "▶ register its Display (guide step 2)"
+"$SUI" client call --package "$PKG" --module audit --function register_audit_display \
+    --args "$REGISTRY" "$DISPLAY_REGISTRY" >/dev/null
+
+echo "▶ publish two reports, one with a report digest (guide step 4)"
+KEPT=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
+    "Walkthrough report — kept" "https://auditor.example/kept.pdf" "$PUBDATE" \
+    "sha256:415a18ef6736ae1aadeb8363b8a9728814912b124b954fe1b9bb579782086117")
+SUPERSEDED=$(bash "$OPS/attest-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" \
+    "Walkthrough report — revoked" "https://auditor.example/revoked.pdf" "$PUBDATE")
+echo "  kept $KEPT, to revoke $SUPERSEDED"
+
+echo "▶ revoke one report (guide: revoking)"
+
+# These failures happen at transaction validation, outside Move unit tests.
+# Require the specific error as well as a failing exit status, so a network,
+# gas, or CLI syntax error cannot pass a negative test.
+expect_rejection() {
+    local name="$1" expected="$2"
+    shift 2
+    local out="$WORK/$name.log"
+    if "$SUI" client ptb --gas-budget 10000000 "$@" >"$out" 2>&1; then
+        echo "✘ $name unexpectedly succeeded" >&2
+        cat "$out" >&2
+        exit 1
+    fi
+    if ! grep -Eq "$expected" "$out"; then
+        echo "✘ $name failed for an unexpected reason (expected $expected):" >&2
+        cat "$out" >&2
+        exit 1
+    fi
+    echo "✔ $name rejected"
+}
+
+# A real shared object of another type cannot substitute for the Registry.
+expect_rejection wrong-registry-reference 'CommandArgumentError \{ arg_idx: 1, kind: TypeMismatch \} in command 0' \
+    --move-call "$PKG::audit::attest_audit" "@$CAP" "@$DISPLAY_REGISTRY" "@$SUBJECT" \
+    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE" @0x6
+
+# Give a second signer its own gas, but leave the AuditAdminCap with the publisher.
+# Keep the active address unchanged so the successful revoke below uses the owner.
+UNAUTHORIZED=$("$SUI" client new-address ed25519 --json | jq -er '.address')
+"$SUI" client ptb --split-coins gas '[1000000000]' --assign funding \
+    --transfer-objects '[funding]' "@$UNAUTHORIZED" >/dev/null
+
+CAP_OWNERSHIP_ERROR="Object $CAP is owned by account address .*, but given owner/signer address is $UNAUTHORIZED"
+expect_rejection unauthorized-attest "$CAP_OWNERSHIP_ERROR" \
+    --sender "@$UNAUTHORIZED" \
+    --move-call "$PKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" \
+    '"Must not be issued"' '"https://auditor.example/rejected.pdf"' none "$PUBDATE" @0x6
+expect_rejection unauthorized-revoke "$CAP_OWNERSHIP_ERROR" \
+    --sender "@$UNAUTHORIZED" \
+    --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" "@$SUPERSEDED" @0x6
+
+# Revoking is per schema: this auditor's revoke must not take another schema's
+# attestation, even through that attestation's own subject. The demo's auditor_a
+# audit of dependency v1 has a type of the same name, audit::Audit, in another
+# package.
+OTHER_SUBJECT=$(jq -er '.subjects.dependency' "$DEMO_IDS")
+OTHER_AUDIT=$(jq -er '.createdAttestations.dependencyAudit' "$DEMO_IDS")
+# Code 2 is sui::transfer's EReceivingObjectTypeMismatch. A wrong subject would
+# fail with 3, EUnableToReceiveObject, instead.
+expect_rejection other-schema-revoke "transfer::receive_impl' at instruction [0-9]+ with code 2\$" \
+    --move-call "$PKG::audit::revoke_audit" "@$CAP" "@$REGISTRY" "@$OTHER_SUBJECT" "@$OTHER_AUDIT" @0x6
+
+# The authorized operation still succeeds after the rejected attempts. The final
+# snapshot also checks that they emitted no registry events or extra attestations.
+bash "$OPS/revoke-audit.sh" "$PKG" "$CAP" "$REGISTRY" "$SUBJECT" "$SUPERSEDED"
+echo "  revoked $SUPERSEDED"

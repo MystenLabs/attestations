@@ -1,33 +1,39 @@
 #[test_only]
 module attestations::attestations_tests;
 
+use attestations::attestations::{Self, Registry, Attestation, Attested, Revoked};
+use std::internal::Permit;
 use std::unit_test::assert_eq;
+use sui::clock::{Self, Clock};
+use sui::derived_object;
+use sui::event;
 use sui::test_scenario::{Self, Scenario};
-use sui::transfer::Receiving;
-use attestations::attestations::{
-    Self,
-    Registry,
-    Box,
-    Attestation,
-};
 
 const ALICE: address = @0xA11CE;
 
-/// Test-only schema. Defined here so this module is its `Permit<TestSchema>`
-/// minting authority (the registry's `attest`/`revoke` require it).
-public struct TestSchema has store, drop {
-    tag: u8,
+/// The clock when the tests attest, and when they revoke.
+const CREATED_MS: u64 = 1_000;
+const REVOKED_MS: u64 = 2_000;
+
+/// Two test schemas. Defined here, so this module mints their permits, as a
+/// schema's own module would.
+public struct Audit has drop, store {
+    score: u8,
 }
+
+public struct Review has drop, store {
+    score: u8,
+}
+
+fun audit(): Permit<Audit> { std::internal::permit<Audit>() }
+
+fun review(): Permit<Review> { std::internal::permit<Review>() }
 
 fun subject_for(addr: address): ID { addr.to_id() }
 
-/// A `Permit<TestSchema>` — only this module (TestSchema's definer) can mint it.
-fun permit(): std::internal::Permit<TestSchema> { std::internal::permit<TestSchema>() }
-
-/// Publish the registry. Returns the scenario at a fresh tx, plus the registry's
-/// id — all that `attest` and the box-address derivations need, so no test but
-/// this one has to take the shared `Registry`.
-fun begin(): (Scenario, ID) {
+/// Publish the registry. Returns the scenario at a fresh tx, the registry's
+/// id, and a clock at `CREATED_MS`.
+fun begin(): (Scenario, ID, Clock) {
     let mut scenario = test_scenario::begin(ALICE);
     attestations::init_for_testing(scenario.ctx());
 
@@ -37,144 +43,236 @@ fun begin(): (Scenario, ID) {
     test_scenario::return_shared(registry);
 
     // Close the tx: a returned shared object only re-enters the inventory that
-    // `take_shared` reads at a tx boundary, so without this the next take aborts
-    // on an empty inventory.
+    // `take_shared` reads at a tx boundary.
     scenario.next_tx(ALICE);
-    (scenario, registry_id)
+    let mut clock = clock::create_for_testing(scenario.ctx());
+    clock.set_for_testing(CREATED_MS);
+    (scenario, registry_id, clock)
 }
 
-/// As `begin`, but with `subject`'s active box already created.
-fun setup_with_box(subject: ID): (Scenario, ID) {
-    let (mut scenario, registry) = begin();
-    scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
-
-    scenario.next_tx(ALICE);
-    (scenario, registry)
+fun finish(scenario: Scenario, clock: Clock) {
+    clock.destroy_for_testing();
+    scenario.end();
 }
 
-/// The id form of `subject`'s active or revoked box address.
-fun box_id(registry: ID, subject: ID, revoked: bool): ID {
-    object::id_from_address(attestations::box_address(registry, subject, revoked))
+/// The address `subject`'s attestations live at, derived the way an off-chain
+/// consumer derives it: from the registry's id and the subject alone.
+fun address_of(registry: ID, subject: ID): address {
+    derived_object::derive_address(registry, subject)
 }
 
-/// The ids of the attestations owned by `owner`, which is a box address — no
-/// object need exist there, which is how the revoked address is read.
-fun attestation_ids(owner: ID): vector<ID> {
-    test_scenario::receivable_object_ids_for_owner_id<Attestation<TestSchema>>(owner)
+/// The ids of the `Attestation<T>`s at `subject`'s address, live and revoked
+/// alike.
+fun ids<T: store>(registry: ID, subject: ID): vector<ID> {
+    test_scenario::receivable_object_ids_for_owner_id<Attestation<T>>(address_of(
+        registry,
+        subject,
+    ).to_id())
 }
 
-#[test]
-fun create_box_is_idempotent() {
-    let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = begin();
-
-    scenario.with_shared!<Registry>(|reg, _| {
-        reg.create_box(subject);
-        reg.create_box(subject); // idempotent: the second call is a no-op
+/// Attest about `subject` through the shared registry.
+fun attest<T: store>(
+    scenario: &mut Scenario,
+    permit: Permit<T>,
+    subject: ID,
+    data: T,
+    clock: &Clock,
+) {
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        registry.attest(permit, subject, data, clock, scenario.ctx());
     });
+}
 
-    // The box created by the first call is intact and still shared.
-    scenario.next_tx(ALICE);
-    let active = box_id(registry, subject, false);
-    scenario.with_shared_by_id!<Box>(active, |box, _| {
-        assert!(attestation_ids(object::id(box)).is_empty());
+/// Revoke the `Attestation<T>` with id `id`, naming `subject` as its subject.
+fun revoke<T: store>(
+    scenario: &mut Scenario,
+    permit: Permit<T>,
+    subject: ID,
+    id: ID,
+    clock: &Clock,
+) {
+    scenario.with_shared!<Registry>(|registry, scenario| {
+        registry.revoke(
+            permit,
+            subject,
+            test_scenario::receiving_ticket_by_id<Attestation<T>>(id),
+            clock,
+            scenario.ctx(),
+        );
     });
-    scenario.end();
 }
 
+/// An attestation lands at the address derived from the registry's id and its
+/// subject: live, stamped with the clock, and with its data intact.
 #[test]
-fun attest_and_read() {
+fun attest_lands_at_derived_address() {
     let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = setup_with_box(subject);
-    let active = box_id(registry, subject, false);
-
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 42 }, scenario.ctx());
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 90 }, &clock);
 
     scenario.next_tx(ALICE);
-    let ids = attestation_ids(active);
-    assert_eq!(ids.length(), 1);
-    scenario.with_shared_by_id!<Box>(active, |box, _| {
-        let rcv: Receiving<Attestation<TestSchema>> =
-            test_scenario::receiving_ticket_by_id(ids[0]);
-        let a = box.borrow_for_testing(rcv);
-        assert_eq!(a.subject(), subject);
-        assert_eq!(a.data().tag, 42);
-        box.put_back_for_testing(a);
+    let found = ids<Audit>(registry, subject);
+    assert_eq!(found.length(), 1);
+    let at = address_of(registry, subject);
+    let a: Attestation<Audit> = scenario.take_from_address_by_id(at, found[0]);
+    assert_eq!(a.subject(), subject);
+    assert_eq!(a.data().score, 90);
+    assert_eq!(a.created_at_ms(), CREATED_MS);
+    assert!(a.revoked_at_ms().is_none());
+    test_scenario::return_to_address(at, a);
+    finish(scenario, clock);
+}
+
+/// Attesting needs nothing but the registry, with no setup per subject. Each
+/// subject has its own address, and one subject's attestations sit side by
+/// side there.
+#[test]
+fun attest_keeps_subjects_apart() {
+    let (one, other) = (subject_for(@0xDEAD), subject_for(@0xBEEF));
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), one, Audit { score: 1 }, &clock);
+    scenario.next_tx(ALICE);
+    attest(&mut scenario, audit(), one, Audit { score: 2 }, &clock);
+    scenario.next_tx(ALICE);
+    attest(&mut scenario, audit(), other, Audit { score: 3 }, &clock);
+
+    scenario.next_tx(ALICE);
+    assert!(address_of(registry, one) != address_of(registry, other));
+    assert_eq!(ids<Audit>(registry, one).length(), 2);
+    assert_eq!(ids<Audit>(registry, other).length(), 1);
+    finish(scenario, clock);
+}
+
+/// The first revoke for a subject creates its anchor on the spot, with no
+/// setup transaction. The attestation stays at its address, stamped with the
+/// revocation time, with its data intact.
+#[test]
+fun first_revoke_creates_the_anchor() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, registry, mut clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 90 }, &clock);
+
+    scenario.next_tx(ALICE);
+    let id = ids<Audit>(registry, subject)[0];
+    clock.set_for_testing(REVOKED_MS);
+    revoke(&mut scenario, audit(), subject, id, &clock);
+
+    scenario.next_tx(ALICE);
+    assert_eq!(ids<Audit>(registry, subject), vector[id]);
+    let at = address_of(registry, subject);
+    let a: Attestation<Audit> = scenario.take_from_address_by_id(at, id);
+    assert_eq!(a.revoked_at_ms(), option::some(REVOKED_MS));
+    assert_eq!(a.created_at_ms(), CREATED_MS);
+    assert_eq!(a.data().score, 90);
+    test_scenario::return_to_address(at, a);
+    finish(scenario, clock);
+}
+
+/// A subject's later revokes reuse the anchor its first revoke created.
+#[test]
+fun later_revoke_reuses_the_anchor() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 1 }, &clock);
+    scenario.next_tx(ALICE);
+    attest(&mut scenario, audit(), subject, Audit { score: 2 }, &clock);
+
+    scenario.next_tx(ALICE);
+    let found = ids<Audit>(registry, subject);
+    revoke(&mut scenario, audit(), subject, found[0], &clock);
+    scenario.next_tx(ALICE);
+    revoke(&mut scenario, audit(), subject, found[1], &clock);
+
+    scenario.next_tx(ALICE);
+    let at = address_of(registry, subject);
+    found.do!(|id| {
+        let a: Attestation<Audit> = scenario.take_from_address_by_id(at, id);
+        assert!(a.revoked_at_ms().is_some());
+        test_scenario::return_to_address(at, a);
     });
-    scenario.end();
+    finish(scenario, clock);
 }
 
-#[test]
-fun reissuance_succeeds() {
+/// Revocation is terminal: revoking a revoked attestation aborts, so its
+/// revocation time can't be overwritten.
+#[test, expected_failure(abort_code = attestations::EAlreadyRevoked)]
+fun revoke_twice_aborts() {
     let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = setup_with_box(subject);
-    let active = box_id(registry, subject, false);
-
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 1 }, scenario.ctx());
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 2 }, scenario.ctx());
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 90 }, &clock);
 
     scenario.next_tx(ALICE);
-    let ids = attestation_ids(active);
-    assert_eq!(ids.length(), 2);
-    assert!(ids[0] != ids[1]);
-    scenario.end();
+    let id = ids<Audit>(registry, subject)[0];
+    revoke(&mut scenario, audit(), subject, id, &clock);
+    // A fresh ticket, so the failure is the revocation check, not a stale version.
+    scenario.next_tx(ALICE);
+    revoke(&mut scenario, audit(), subject, id, &clock);
+    finish(scenario, clock);
 }
 
-/// `attest` lands in the active box even before `create_box` is called — only
-/// `revoke` needs the Box object. Here we attest first, then create the box and
-/// read it back.
-#[test]
-fun attest_before_create_box() {
-    let subject = subject_for(@0xBEEF);
-    let (mut scenario, registry) = begin();
-
-    // Attest with NO box created yet.
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 9 }, scenario.ctx());
-    // Now create the box at the (already-populated) active address.
-    scenario.with_shared!<Registry>(|reg, _| reg.create_box(subject));
+/// An attestation can only be revoked through its own subject's anchor.
+#[test, expected_failure(abort_code = sui::transfer::EUnableToReceiveObject)]
+fun revoke_with_wrong_subject_aborts() {
+    let (subject, other) = (subject_for(@0xDEAD), subject_for(@0xBEEF));
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 90 }, &clock);
 
     scenario.next_tx(ALICE);
-    assert_eq!(attestation_ids(box_id(registry, subject, false)).length(), 1);
-    scenario.end();
+    let id = ids<Audit>(registry, subject)[0];
+    revoke(&mut scenario, audit(), other, id, &clock);
+    finish(scenario, clock);
 }
 
-/// Revocation moves the attestation out of the active box and onto the
-/// subject's revoked address.
+/// Revoking one attestation leaves the others at its address alone: another
+/// schema's stays live, and the revoked one keeps its data.
 #[test]
-fun revoke_moves_to_revoked_box() {
+fun revoke_leaves_other_attestations_alone() {
     let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = setup_with_box(subject);
-    let active = box_id(registry, subject, false);
-    let revoked = box_id(registry, subject, true);
-
-    attestations::attest(registry, permit(), subject, TestSchema { tag: 7 }, scenario.ctx());
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 90 }, &clock);
+    scenario.next_tx(ALICE);
+    attest(&mut scenario, review(), subject, Review { score: 4 }, &clock);
 
     scenario.next_tx(ALICE);
-    let att_id = attestation_ids(active)[0];
+    let audit_id = ids<Audit>(registry, subject)[0];
+    let review_id = ids<Review>(registry, subject)[0];
+    revoke(&mut scenario, audit(), subject, audit_id, &clock);
 
-    // Revoke from the active box. This module defines `TestSchema`, so it can
-    // mint the `Permit<TestSchema>` the registry's `revoke` requires.
-    scenario.with_shared_by_id!<Box>(active, |box, _| {
-        let rcv: Receiving<Attestation<TestSchema>> =
-            test_scenario::receiving_ticket_by_id(att_id);
-        box.revoke(permit(), rcv);
-    });
-
-    // Active box empty; the revoked address now owns the attestation.
     scenario.next_tx(ALICE);
-    assert!(attestation_ids(active).is_empty());
-
-    // No Box object exists at the revoked address; the attestation is simply
-    // owned by that address, which is what off-chain consumers read.
-    let revoked_ids = attestation_ids(revoked);
-    assert_eq!(revoked_ids.length(), 1);
-    assert_eq!(revoked_ids[0], att_id);
-
-    scenario.end();
+    // One address, the two schemas told apart by type.
+    assert_eq!(ids<Audit>(registry, subject), vector[audit_id]);
+    assert_eq!(ids<Review>(registry, subject), vector[review_id]);
+    let at = address_of(registry, subject);
+    let revoked: Attestation<Audit> = scenario.take_from_address_by_id(at, audit_id);
+    assert!(revoked.revoked_at_ms().is_some());
+    assert_eq!(revoked.data().score, 90);
+    let live: Attestation<Review> = scenario.take_from_address_by_id(at, review_id);
+    assert!(live.revoked_at_ms().is_none());
+    assert_eq!(live.data().score, 4);
+    test_scenario::return_to_address(at, revoked);
+    test_scenario::return_to_address(at, live);
+    finish(scenario, clock);
 }
 
-// `register_display` and `add_display_field` cannot be unit-tested here: they
-// need the system `DisplayRegistry` (shared at `0xd`), and the only way to
-// create one in tests is `display_registry::create_for_testing`, which is
-// `public(package)` to the `sui` framework. Coverage for those flows needs
-// integration testing on devnet/testnet or via the forking tool.
+/// Attesting emits one `Attested<T>` and revoking one `Revoked<T>`, each
+/// naming the attestation's subject.
+#[test]
+fun attest_and_revoke_emit_events() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, registry, clock) = begin();
+    attest(&mut scenario, audit(), subject, Audit { score: 90 }, &clock);
+    let attested = event::events_by_type<Attested<Audit>>();
+    assert_eq!(attested.length(), 1);
+    assert_eq!(attested[0].attested_subject(), subject);
+    assert!(event::events_by_type<Revoked<Audit>>().is_empty());
+    assert_eq!(scenario.next_tx(ALICE).num_user_events(), 1);
+
+    let id = ids<Audit>(registry, subject)[0];
+    revoke(&mut scenario, audit(), subject, id, &clock);
+    let revoked = event::events_by_type<Revoked<Audit>>();
+    assert_eq!(revoked.length(), 1);
+    assert_eq!(revoked[0].revoked_subject(), subject);
+    assert!(event::events_by_type<Attested<Audit>>().is_empty());
+    assert_eq!(scenario.next_tx(ALICE).num_user_events(), 1);
+    finish(scenario, clock);
+}

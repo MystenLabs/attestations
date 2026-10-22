@@ -15,7 +15,7 @@ This README walks a new auditor from the template to publishing live reports.
 The Move code (`sources/audit.move`) defines three things you'll work with:
 
 - **`Audit`** — a completed review: a human-readable description, a link to the
-  full report, and the report's publication date.
+  full report, optionally the report's digest, and its publication date.
 - **`AuditAdminCap`** — the single authority that may issue or revoke this
   auditor's attestations, minted at publish and sent to the publisher.
 - **`register_audit_display`** — run once after publishing, so your attestations
@@ -57,8 +57,8 @@ From the output, note three ids you'll need:
   Objects*, matched by the object types ending `::audit::AuditAdminCap` and
   `0x2::package::UpgradeCap`. Both were sent to you; custody them in step 3.
 
-You'll also need the registry's shared **`Registry` object id** from its mainnet
-deployment — used in the call below and every time you issue.
+You'll also need the shared **`Registry`** object id from the registry's mainnet
+deployment. Use it to register your Display, issue reports, and revoke them.
 
 Register your Display once so `Attestation<Audit>` objects render with your name,
 icon, and report links (`0xd` is the system display registry):
@@ -91,13 +91,20 @@ Publishing a report requires one `attest_audit` call:
 ```sh
 sui client ptb \
   --move-call <your-pkg>::audit::attest_audit \
-    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' <published-at-ms> \
+    @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' \
+    '<report-hash>' <published-at-ms> @0x6 \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > attest-tx.b64
 ```
 
 `<subject>` is the id of the package (or any object) you reviewed, and
 `<published-at-ms>` is the publication date in milliseconds since the Unix epoch.
+`@0x6` is the `Clock`, from which the registry records when you attested.
+`<report-hash>` lets readers check that the report at `<report-url>` is the one
+you published: `some("sha256:<hex>")`, with the SHA-256 of the exact file you
+host (`shasum -a 256 report.pdf`), or `none` to record no digest. The digest
+can't be changed after you attest, so hash the final file, and serve it
+byte-for-byte unchanged.
 In a `--move-call` target, the package can be its mvr name — e.g. the
 `@your-org/audits` you registered — instead of an address; the other arguments
 (`@<registry>`, `@<admin-cap>`, `@<subject>`, …) must be addresses.
@@ -112,8 +119,8 @@ transaction size limits, in which case you can break the PTB into multiple PTBs)
 
 ```sh
 sui client ptb \
-  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectA> '"..."' '"..."' <date> \
-  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectB> '"..."' '"..."' <date> \
+  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectA> '"..."' '"..."' '<hash>' <date> @0x6 \
+  --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectB> '"..."' '"..."' '<hash>' <date> @0x6 \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > backfill-tx.b64
 ```
@@ -140,8 +147,9 @@ query {
 }
 ```
 
-Each node is one attestation; `contents.json` carries its `subject` and your
-`Audit` fields. `contents.display.output` shows the same rendered fields a wallet
+Each node is one attestation; `contents.json` carries its `subject`, your
+`Audit` fields, and its `revoked_at_ms`, which is `null` until you revoke it.
+`contents.display.output` shows the same rendered fields a wallet
 or explorer would present, so it's the quickest way to check that your
 `register_display` templates interpolate as you intended — `display.errors`
 reports any that failed to render. If you've added attestation types in an
@@ -150,34 +158,26 @@ upgrade (e.g. `AuditV2`), query each type the same way.
 ## Revoking an attestation
 
 To withdraw or supersede a report, revoke its attestation with the same
-`AuditAdminCap`. The registry stores each subject's attestations in a *box*, and
-revoking moves the attestation from the subject's *active* box to its *revoked*
-box — consumers stop treating it as live, but it stays on-chain and auditable.
+`AuditAdminCap`. Revoking sets the attestation's `revoked_at_ms`, and the
+attestation stays at its subject's address — consumers stop treating it as live,
+but it stays on-chain and auditable.
 
-Revoking works on that box, so it must exist (issuing doesn't need it).
-`create_box` is idempotent, so just run it — no cap needed, so execute it
-directly (`<registry-pkg>` is the registry's package id):
-
-```sh
-sui client ptb --move-call <registry-pkg>::attestations::create_box @<registry> @<subject>
-```
-
-Then build the revoke transaction the same way you build an attestation:
+Build the revoke transaction the same way you build an attestation:
 
 ```sh
 sui client ptb \
-  --move-call <your-pkg>::audit::revoke_audit @<admin-cap> @<active-box> @<attestation-id> \
+  --move-call <your-pkg>::audit::revoke_audit @<admin-cap> @<registry> @<subject> @<attestation-id> @0x6 \
   --sender <multisig-address> \
   --serialize-unsigned-transaction > revoke-tx.b64
 ```
 
-`<active-box>` is the box that owns the attestation — its current owner, which
-`sui client object <attestation-id>` shows. `<attestation-id>` is the attestation
-to revoke, passed with `@` so it resolves as the `Receiving` argument. Sign and
-execute through your multisig, as with an attestation transaction.
+`<subject>` is the subject the attestation is about. `<attestation-id>` is the
+attestation to revoke, passed with `@` so it resolves as the `Receiving`
+argument. Sign and execute through your multisig, as with an attestation
+transaction.
 
 ## Learn more
 
 - Attester-identity model and registry design — the registry repo's `DESIGN.md`.
 - Display field conventions (`name`, `description`, `image_url`, `link`,
-  `published_at`) — `CONVENTIONS.md`.
+  `link_hash`, `published_at`) — `CONVENTIONS.md`.

@@ -13,7 +13,7 @@ Display-field **conventions** rather than additional Move types.
 
 ```
 packages/
-  attestations/       — the only deployable: Registry, Box, Attestation
+  attestations/       — the only deployable: Registry, Attestation
 examples/             — reusable schema patterns for third-party attesters
   auditor/            — reference auditor schema (`Audit` + `AuditAdminCap`)
 demo/                 — fixtures that exist only to drive the local demo (see demo/README.md)
@@ -23,7 +23,7 @@ demo/                 — fixtures that exist only to drive the local demo (see 
   dependency_example/ — a subject; dependency of subject_example
   subject_example/    — the browsed subject (depends on dependency_example)
   scripts/            — demo orchestration: run-demo.sh, test-publish.sh, demo.sh
-scripts/              — reusable CLI ops: create-box, attest-audit, revoke-audit
+scripts/              — reusable CLI ops: attest-audit, revoke-audit
 CONVENTIONS.md        — Display-field conventions (expires_at, …)
 FUTURE-EXTENSIONS.md  — design memos for surfaces deliberately deferred from v0
 ```
@@ -31,22 +31,21 @@ FUTURE-EXTENSIONS.md  — design memos for surfaces deliberately deferred from v
 ## Concepts
 
 ```
-Registry (shared singleton)
-  ├── active box  (a claimed `Box`)   ──owns──▶ un-revoked Attestation<T> (TTO)
-  └── revoked address (no object)     ──owns──▶ revoked Attestation<T>
+Registry (shared singleton; holds the anchor UIDs that `revoke` claims)
+  └── derive_address(registry, subject) ──owns──▶ Attestation<T> (TTO), live or revoked
 ```
 
-A `Registry` is a shared singleton, parent of two derived box addresses per
-subject — *active* and *revoked*. Each address is
-`derived_object::derive_address(registry, BoxKey { subject, revoked })` —
-computable off-chain — so consumers enumerate every un-revoked attestation about
-a subject via `getOwnedObjects(active_box, filter={StructType: …})`, with
-server-side type filtering. An attestation carries no status field: it is
-revoked iff it lives at the revoked address.
+A `Registry` is a shared singleton. Each subject's attestations live at one
+address, `derived_object::derive_address(registry, subject)`, which consumers
+compute off-chain from the registry and subject ids. They list a subject's
+attestations via `getOwnedObjects(address, filter={StructType: …})`, with
+server-side type filtering. Each attestation records its own status: it is
+revoked iff its `revoked_at_ms` field is set.
 
-Only the active address holds a claimed `Box` object, because `revoke` needs a
-`&mut UID` there to `transfer::receive` from. Nothing ever receives *from* the
-revoked address, so it needs no object.
+`revoke` needs a `&mut UID` at the subject's address to `transfer::receive`
+from. The first `revoke` for a subject claims that UID and keeps it in the
+Registry's `anchors` table, so no object exists at the address, and no setup
+transaction comes before the first revoke.
 
 The key design feature is that **the schema package has complete control over
 its attestations.** `attest`, `revoke`, and `register_display` are all gated by
@@ -55,7 +54,7 @@ package can issue, revoke, or set the Display for `Attestation<T>`. The
 recorded attester is therefore `T`'s package — bound to the type at compile
 time, not denormalized into a field — and each schema defines its own revocation
 authority (an admin cap, a per-attestation bearer cap, or none at all).
-Revocation moves an attestation from the subject's active box to its revoked
+Revocation sets an attestation's `revoked_at_ms` and leaves it at its subject's
 address. Time-based effectiveness (expiration) and other cross-cutting concerns
 sit in the Display layer per `CONVENTIONS.md` — the registry itself stays minimal.
 ("Negative" attestations — vulnerability disclosures that propagate from a
@@ -65,8 +64,11 @@ MVP.)
 ## Building and testing
 
 ```bash
-bash scripts/check.sh                          # every package
+bash scripts/check.sh                          # lint, build, and test every package
 bash scripts/check.sh packages/attestations    # just the ones named
+bash scripts/check-format.sh                   # Move formatting; --write to fix
+bash scripts/check-template.sh                 # examples/auditor against this checkout
+bash e2e/run.sh                                # end to end on a fresh localnet
 ```
 
 `check.sh` attempts every package even if one fails, and exits nonzero if any
@@ -77,14 +79,22 @@ env-specific dependencies, so a direct `sui move test` needs a build env:
 cd packages/attestations && sui move test --build-env testnet
 ```
 
+`e2e/run.sh` starts a localnet, publishes every package, runs the demo and the
+`examples/auditor` onboarding guide, and checks the resulting on-chain state
+against an [insta](https://insta.rs) snapshot,
+`e2e/tests/snapshots/attestation_state.snap`. When a change to that state is
+intended, the run leaves the new snapshot for
+`cargo insta review --manifest-path e2e/Cargo.toml`. CI runs all of these on
+every pull request.
+
 ## Running the demo
 
-The demo creates Boxes for two real subjects (`dependency_example` and the
-`subject_example` that depends on it), issues audits (an `Audit` on the
-dependency; an `AuditV2` and a v1 `Audit` on the subject) plus two
-attestations a trust consumer must filter out, then revokes the dependency's
-audit and the subject's v1 `Audit` — showing each leave its active box (the
-subject keeps its `AuditV2` as the live signal).
+The demo attests about two real subjects (`dependency_example` and the
+`subject_example` that depends on it): an `Audit` on the dependency, an
+`AuditV2` and a v1 `Audit` on the subject, and two attestations a trust consumer
+must filter out. It then revokes the subject's v1 `Audit`, which stays at the
+subject's address with `revoked_at_ms` set (the subject keeps its `AuditV2` as
+the live signal).
 
 ### One-command (recommended for iteration)
 
@@ -107,16 +117,19 @@ the ports and removes the scratch dirs without relying on any trap having run.
 
 ### Step-by-step (testnet or manual exploration)
 
-The defaults target a local sui network (`sui start --with-faucet`); to point
-at testnet or another remote network, pass `--rpc <url>` and `--pubfile <path>`.
+The defaults target a local sui network (`sui start --with-faucet
+--with-graphql`); to point at testnet or another remote network, switch your
+sui client to it and set `GRAPHQL` and `PUBFILE` (see below).
 
 Prerequisites:
 
 1. Start a localnet in another shell:
    ```bash
-   sui start --force-regenesis --with-faucet
+   sui start --force-regenesis --with-faucet --with-graphql
    ```
-   This serves gRPC + JSON-RPC on `127.0.0.1:9000` and a faucet on `:9123`.
+   This serves gRPC on `127.0.0.1:9000`, a faucet on `:9123`, and GraphQL on
+   `:9125`, which `demo.sh` reads owned objects from. GraphQL's indexer runs a
+   temporary Postgres, so the Postgres server binaries must be on `PATH`.
 
 2. Switch your sui CLI to it and faucet a bit of gas:
    ```bash
@@ -126,14 +139,14 @@ Prerequisites:
 
 3. Test-publish all packages with one shared pubfile and register the
    Displays. The script does the whole sequence in one go and prints the
-   `REGISTRY_ID=…` export line you'll need next:
+   `REGISTRY_ID=…` value you'll need next:
    ```bash
    ./demo/scripts/test-publish.sh
    ```
    That writes `Pub.localnet.toml` at the repo root (gitignored — ephemeral
    and per-user).
 
-4. Export the printed Registry id:
+4. Export the printed id of the shared `Registry`:
    ```bash
    export REGISTRY_ID=0x…
    ```
@@ -144,25 +157,25 @@ Then run the demo (it reads `Pub.localnet.toml` and `REGISTRY_ID`):
 bash demo/scripts/demo.sh
 ```
 
-`demo/scripts/demo.sh` composes the `scripts/` CLI ops (create-box, attest-audit,
-revoke-audit): it creates the boxes, issues the audits, revokes two of them, and
-writes `demo-ids.json` for the MVR seeder, printing each step's object ids.
+`demo/scripts/demo.sh` composes the `scripts/` CLI ops (attest-audit,
+revoke-audit): it issues the audits, revokes one of them, and writes
+`demo-ids.json` for the MVR seeder, printing each step's object ids.
 
-Options:
+Options, as environment variables:
 
-- `--rpc <url>` — override the default localnet gRPC endpoint.
-- `--pubfile <path>` — use a different pubfile (e.g. `Pub.testnet.toml`
+- `GRAPHQL=<url>` — the GraphQL endpoint `demo.sh` reads owned objects from.
+  Default: the localnet's, `http://127.0.0.1:9125/graphql`.
+- `PUBFILE=<path>` — use a different pubfile (e.g. `Pub.testnet.toml`
   if you've published to testnet instead).
-- `--subject <hex-id>` — re-use a specific subject ID. Default: a fresh
-  random ID per run, so `create_box` doesn't collide on re-runs.
+- `DEMO_IDS=<path>` — where to write `demo-ids.json`. Default: the repo root.
 
 ## Effectiveness
 
-Off-chain consumers decide whether an attestation is *effective*: it must be
-unexpired per the `expires_at` Display convention (if present). Revocation is
-handled upstream by box membership — a revoked attestation lives at the revoked
-address, not the active box — so it isn't part of that check. See `CONVENTIONS.md`
-for the conventions and their evaluation rules.
+Off-chain consumers decide whether an attestation is *effective*: its
+`revoked_at_ms` must be none, and it must be unexpired per the `expires_at`
+Display convention (if present). A revoked attestation stays at its subject's
+address, so a consumer that lists the address must check `revoked_at_ms`. See
+`CONVENTIONS.md` for the conventions and their evaluation rules.
 
 ## Further reading
 

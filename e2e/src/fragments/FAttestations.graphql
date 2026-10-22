@@ -1,0 +1,11 @@
+fragment FAttestations on Address {
+    objects(first: $first, filter: { type: $type }) {
+        pageInfo { ...FPageInfo }
+        nodes {
+            contents {
+                ...FMoveValue
+                display { output errors }
+            }
+        }
+    }
+}
