@@ -86,13 +86,6 @@ public fun revoke<T: store>(
     transfer::transfer(attestation, derived_object::derive_address(r.id.to_inner(), subject));
 }
 
-fun init(ctx: &mut TxContext) {
-    transfer::share_object(Registry {
-        id: object::new(ctx),
-        anchors: table::new(ctx),
-    });
-}
-
 /// Create and share the `Display<Attestation<T>>` for schema `T`, with one
 /// entry per pair of `fields` and `values`. Gated by `Permit<T>`, so only `T`'s
 /// defining module can call it. `display_registry` allows one `Display` per
@@ -152,6 +145,13 @@ public fun add_display_field<T: store>(
         display.set(&cap, field, value);
     });
     transfer::public_transfer(cap, registry.id.to_address());
+}
+
+fun init(ctx: &mut TxContext) {
+    transfer::share_object(Registry {
+        id: object::new(ctx),
+        anchors: table::new(ctx),
+    });
 }
 
 // === Test seam ===
