@@ -23,34 +23,34 @@ party can forge one in their name.
   for who may issue and revoke — an admin cap, a per-attestation cap, a
   multisig, or no one at all.
 - **A shared `Registry`** is created when the package is published. Each
-  subject's attestations live in per-subject boxes derived from it, at addresses
-  anyone can compute offchain from the registry and subject ids. `attest` takes
-  `&Registry`, so every attestation lands in this registry's boxes, where it
-  can be revoked.
-- **Revocation is a location, not a flag.** Every subject has an active box and
-  a revoked address, and an attestation's status is simply which one owns it. A
-  consumer reads a subject's live attestations with a single type-filtered query
-  and no per-object status check, which keeps enumeration cheap for indexers.
+  subject's attestations live at an address derived from it, which anyone can
+  compute offchain from the registry and subject ids. `attest` takes
+  `&Registry`, so every attestation is transferred to an address that this
+  registry's `revoke` can receive from.
+- **Revocation is a field.** `revoke` sets an attestation's `revoked_at_ms` and
+  leaves the attestation at its subject's address. A consumer reads a subject's
+  attestations with a single type-filtered query and checks `revoked_at_ms` on
+  each.
 
 ## Reading attestations
 
 The layout is built so a consumer can find a subject's attestations in one query,
-with no index to maintain. Every subject's attestations of type `T` live at a
-*box address* you derive yourself from the registry and the subject:
+with no index to maintain. Every subject's attestations of type `T` live at an
+address you derive yourself from the registry and the subject:
 
 ```
-box = derive_address(registry, BoxKey { subject, revoked: false })
+address = derive_address(registry, subject)
 ```
 
 List the objects owned by that address, filtered to `Attestation<T>`, and you
-have the subject's live attestations — nothing to check per object. Revoked ones
-aren't there at all; they sit at the sibling address derived with
-`revoked: true`.
+have the subject's attestations. Revoked ones are there too: an attestation is
+live while its `revoked_at_ms` is none.
 
-Deriving the address means reproducing the `BoxKey` BCS layout and Sui's
-derived-object derivation, so in practice you'll want a small helper rather than
-a shell one-liner. `examples/auditor` shows a worked GraphQL query against the
-attestation type, including how to read the rendered Display fields.
+Deriving the address means reproducing Sui's derived-object derivation, with the
+subject's `ID` as the key (type `0x2::object::ID`), so in practice you'll want a
+small helper rather than a shell one-liner. `examples/auditor` shows a worked
+GraphQL query against the attestation type, including how to read the rendered
+Display fields.
 
 ## Creating attestations
 
@@ -74,7 +74,9 @@ Testnet:
   `0x5a8a789c0385d5e891519612a7d3d8ab36f1d9fc03d63cdabf1cefb3d848b568`
   (the parent every box address is derived from)
 
-This testnet deployment's `attest` still takes the registry's bare id rather
-than `&Registry`. It will be replaced by a fresh publish.
+This testnet deployment predates the code in this directory: its `attest` takes
+the registry's bare id, and its `revoke` moves an attestation to a second derived
+address instead of setting `revoked_at_ms`. It will be replaced by a fresh
+publish.
 
 Not yet published on mainnet.

@@ -49,15 +49,13 @@ discussion ended.
 
 ## What this PoC adopts from the PR-evolved SIP-56
 
-- **Derived-address storage**. The `Registry` is a shared parent UID;
-  per-subject `Box`es live at addresses derived from `(registry, subject)`.
-  Attestations are owned by the Box via transfer-to-object. Off-chain
-  consumers fetch all attestations about a subject from a single
-  computable address.
+- **Derived-address storage**. The `Registry` is a shared parent UID; each
+  subject's attestations are owned, via transfer-to-object, by an address
+  derived from `(registry, subject)`. Off-chain consumers fetch all
+  attestations about a subject from a single computable address.
 - **Receive / re-transfer pattern** for state changes. Revocation in this
-  PoC works this way: the registry receives the attestation from its active
-  Box and transfers it to the subject's revoked sink (a sibling derived
-  address).
+  PoC works this way: the registry receives the attestation at the subject's
+  address, sets its `revoked_at_ms`, and transfers it back.
 
 These are the load-bearing improvements that came out of the SIP-56 PR
 discussion, and both designs build on them.
@@ -120,12 +118,12 @@ SIP-56's recorded attester is `created_by: address` = `tx.sender()` — the
 keypair that signed the transaction.
 
 This PoC's attester is `T`'s original (first-published) package address,
-recovered via `type_name::original_id<T>()` and exposed as `attester_of<T>()`.
+recovered via `type_name::original_id<T>()`.
 It is not emitted as an event field: `Attested<phantom T>` carries `T` as a type
 parameter, so indexers and subscriptions can filter by attester and schema at
 the type level.
 
-The mechanism: `attest<T>(registry, _: Permit<T>, subject, data, ctx)` is
+The mechanism: `attest<T>(registry, _: Permit<T>, subject, data, clock, ctx)` is
 gated by `Permit<T>`, and Move restricts minting a `Permit<T>` to `T`'s
 defining module. So the existence of an `Attestation<T>` on-chain is
 **bytecode proof** that `T`'s defining package's code path minted the permit
@@ -152,15 +150,16 @@ public struct UserAudit has store, drop {
 }
 
 public fun attest_user_audit(
-    registry: &Registry, subject: ID, score: u8, ctx: &mut TxContext,
-): ID {
+    registry: &Registry, subject: ID, score: u8, clock: &Clock, ctx: &mut TxContext,
+) {
     attestations::attest(
         registry,
         std::internal::permit<UserAudit>(),
         subject,
         UserAudit { score, sender: ctx.sender() },
+        clock,
         ctx,
-    )
+    );
 }
 ```
 
@@ -229,33 +228,23 @@ This is the most opinionated of the remaining differences. Consumers
 implement their own curation by maintaining off-chain trust lists of the
 attesters they consider authoritative.
 
-### 5. Storage: per-subject `Box` (derived child), not central registry
+### 5. Storage: attestations at a derived address, the receiving UID in the registry
 
-Both designs use derived addresses (post-PR). The remaining difference is
-the layer of indirection: SIP-56's storage is "attestations transferred
-directly to the derived address," while this PoC introduces an explicit
-`Box` shared object that *lives* at the derived address and owns the
-attestations.
+Both designs use derived addresses (post-PR), and both transfer attestations
+directly to the derived address. An earlier version of this PoC put a `Box`
+shared object at the derived address to own the attestations; the current
+version has no object there.
 
-**Why the Box layer is useful**: the Box exists for two reasons.
+**Where the receiving UID lives**: `transfer::receive` requires a `&mut UID`
+for the address that owns the attestation. This PoC claims that UID on a
+subject's first `revoke` and keeps it in the `Registry`'s `anchors` table,
+keyed by the subject. No setup transaction comes before the first revoke. The
+cost is that `revoke` takes `&mut Registry`, so revocations are sequenced
+through that one shared object.
 
-- **Bytecode-verifiable subject identity**: the Box's `subject: ID` field
-  records what the Box is about. Without it, the derived-address scheme
-  alone doesn't anchor the relationship on-chain — a viewer would have
-  to know the (registry, subject) pair to interpret an address as "a
-  bag of attestations about subject S." The Box surfaces it directly.
-- **Receive/modify primitive**: `transfer::receive(&mut box.id, rcv)`
-  requires a `&mut UID` for the parent. Without an actual object at the
-  derived address, there's no UID to borrow. The Box gives us the
-  per-subject UID needed for revoke (and any future state-change
-  operation).
-
-The Box is created explicitly (`create_box(registry, subject)`, which is
-idempotent and claims the active box). It's a prerequisite
-for `revoke`, not `attest` — `attest` transfers to the derived active-box
-*address* whether or not a Box object exists there yet — so the only cost is a
-one-time setup before a subject's first revoke, in exchange for the two
-properties above.
+Each attestation records its subject in its `subject: ID` field, so a viewer
+can read what an attestation is about without knowing the `(registry,
+subject)` pair.
 
 ### 6. Event shape: phantom `T` + `subject` only
 
@@ -275,34 +264,36 @@ Other fields are denormalization — they appear in tx effects or in the
 attestation's own state, so duplicating them in the event is a
 maintenance hazard (two sources of truth) without information gain.
 
-### 7. Revocation status by box membership, no status field
+### 7. Revocation status: when, not who
 
 SIP-56's attestation struct has `revoked_by: Option<address>` —
 `None` means active, `Some(addr)` records who revoked.
 
-This PoC stores no status on the struct at all: revocation is encoded by
-*which* box owns the attestation (live in the active box, revoked in the
-sink). The `Revoked<T>` event carries only `subject`; the revoker is not
-recorded anywhere on-chain by the registry.
+This PoC's attestation struct has `revoked_at_ms: Option<u64>` — `none` means
+live, and `some(ms)` records when `revoke` ran, from the `Clock`. The
+`Revoked<T>` event carries only `subject`; the revoker is not recorded anywhere
+on-chain by the registry.
 
 **Why this is an improvement**: the revoker is already in the revoke tx's
 effects (`tx.sender()`), recoverable by any indexer. Storing it on the struct
 — or denormalizing it onto the event — is a "two sources of truth" hazard for
-no information gain. And encoding revoked-vs-live as box membership means the
-common read — "all the live attestations about S" — is a single
-`getOwnedObjects` on the active box with no per-object status field to filter on.
+no information gain. The time is on the struct, so a reader of the attestation
+sees when it was revoked without fetching the revoke transaction. In both
+designs a revoked attestation stays at its subject's address, so a consumer
+that lists a subject's attestations filters on the status field.
 
 ### 8. Revocation policy lives in the schema, not the core
 
 SIP-56 (post-PR) bakes a universal bearer `RevokeCap` into the registry.
-This PoC keeps the core policy-free: `revoke<T>(box, _: Permit<T>, rcv)` is
-gated only by `Permit<T>` — which only `T`'s defining module can mint — and
-performs a uniform move (out of the active box, into the revoked sink) plus
-a `Revoked<T>` event. It mints no cap. `attest<T>` returns the new
-attestation's `ID`, the
-one fact a schema can't otherwise recover, so the schema can build whatever
-revocation authority it wants: a bearer cap bound to that id, an admin cap,
-a multisig, or none.
+This PoC keeps the core policy-free:
+`revoke<T>(registry, _: Permit<T>, subject, rcv, clock, ctx)` is gated only by
+`Permit<T>` — which only `T`'s defining module can mint — and performs a
+uniform update (it sets `revoked_at_ms` and returns the attestation to the
+subject's address) plus a `Revoked<T>` event. It mints no cap. The schema
+builds whatever revocation authority it wants: an admin cap, a multisig, or
+none. A bearer cap bound to one attestation needs that attestation's `ID`,
+which `attest<T>` does not return, so the schema has to bind it in a later
+transaction, from the attest transaction's effects.
 
 **Why this is an improvement**: the registry shouldn't dictate revocation
 policy — the party that defines what an attestation *means* (the schema
@@ -347,7 +338,7 @@ plays out in this PoC:
 | Scope: minimum viable attestations | Broad agreement on minimal scope | Adopted |
 | Revocation (per-type vs. universal) | Universal via `RevokeCap` | Diverged: policy-free core gated by `Permit<T>`; revocation policy lives in the schema |
 | Pinning: hide vs. highlight | Switched to highlight | Removed from the core; author-side highlighting is expressible as a `Pin { attestation: ID }` schema, consumer-side filtering as a trust list |
-| Modifying attestations | Receive-modify-retransfer via derived addresses | Adopted as receive-and-retransfer: `revoke` moves the attestation between derived addresses, no in-place mutation |
+| Modifying attestations | Receive-modify-retransfer via derived addresses | Adopted: `revoke` receives the attestation, sets `revoked_at_ms`, and transfers it back to the same derived address |
 | Authorization scheme | Sender → `*Cap` pattern | Diverged: `Permit<T>` gating (schema chooses cap / admin / multisig) |
 | Display immutability | Frozen `AttestationType<T>` wraps `DisplayCap` | Append-only Display: `DisplayCap` parked on the Registry, `add_display_field` aborts on an existing field |
 | Self-discoverable types | Frontends fetch list via on-chain `AttestationType<T>` | Off-chain via event subscription |
@@ -367,8 +358,8 @@ typical mitigation:
   schema, with no core change. A `Pin { attestation: ID }` schema, whose
   `attest` wrapper is gated on the `Publisher` for the subject package, lets an
   author pin noteworthy attestations about their own package. The pin is an
-  ordinary `Attestation<Pin>` about that package, so it lands in the package's
-  active box and any consumer already enumerating that box sees it for free —
+  ordinary `Attestation<Pin>` about that package, so it is owned by the
+  package's address, where any consumer already listing that address sees it —
   and it inherits revocation (unpin) from the core. (Raised by @amnn in review.)
 
   Consumer-side curation is a *different* need, met differently: a separate

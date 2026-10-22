@@ -16,12 +16,12 @@ use sui_sdk_types::Address;
 /// The snapshot's header, for whoever reads it.
 const DESCRIPTION: &str = "\
 The attestation state that lives on the localnet once e2e/run.sh has run. For \
-each subject: the attestations at its active box and at its revoked address, \
-both derived off-chain from the registry and subject ids, with their data and \
-rendered Display; then every registry event, in order. Ids are replaced with \
-names: a package's directory name, `name@vN` for version N of an upgraded \
-package, or a label from the test. A line starting with `!!` marks an \
-inconsistency.";
+each subject: how many registry events name it, and the attestations at its \
+address, derived off-chain from the registry and subject ids, split into live \
+and revoked by `revoked_at_ms`, with their data and rendered Display; then \
+every registry event, in order. Ids are replaced with names: a package's directory name, \
+`name@vN` for version N of an upgraded package, or a label from the test. A \
+line starting with `!!` marks an inconsistency.";
 
 async fn read_state() -> anyhow::Result<String> {
     let chain = Chain::new(&env("E2E_GRAPHQL_URL"))?;

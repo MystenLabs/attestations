@@ -1,8 +1,9 @@
 module auditor_a::audit;
 
-use attestations::attestations::{Registry, Box, Attestation, attest};
+use attestations::attestations::{Registry, Attestation};
 use std::internal;
 use std::string::String;
+use sui::clock::Clock;
 use sui::display_registry::DisplayRegistry;
 use sui::transfer::Receiving;
 
@@ -65,10 +66,10 @@ entry fun register_audit_display(
     );
 }
 
-/// Issue an `Attestation<Audit>` about `subject` and return its `ID`. Gated by
-/// the `AuditAdminCap`, the single authority over this auditor's attestations.
-/// `report_hash` optionally pins the digest of the report at `report_url` (the
-/// `link_hash` convention); pass `none` to omit it.
+/// Issue an `Attestation<Audit>` about `subject`. Gated by the `AuditAdminCap`,
+/// the single authority over this auditor's attestations. `report_hash`
+/// optionally pins the digest of the report at `report_url` (the `link_hash`
+/// convention); pass `none` to omit it.
 public fun attest_audit(
     _: &AuditAdminCap,
     registry: &Registry,
@@ -77,21 +78,29 @@ public fun attest_audit(
     report_url: String,
     report_hash: Option<String>,
     published_at_ms: u64,
+    clock: &Clock,
     ctx: &mut TxContext,
-): ID {
-    attest(
-        registry,
+) {
+    registry.attest(
         internal::permit<Audit>(),
         subject,
         Audit { description, report_url, report_hash, published_at_ms },
+        clock,
         ctx,
-    )
+    );
 }
 
-/// Revoke the `Attestation<Audit>` indicated by `rcv`, which `box` — the
-/// subject's active box — must own. Gated by the `AuditAdminCap`.
-public fun revoke_audit(_: &AuditAdminCap, box: &mut Box, rcv: Receiving<Attestation<Audit>>) {
-    box.revoke(internal::permit<Audit>(), rcv);
+/// Revoke the `Attestation<Audit>` indicated by `rcv`, which must be one of
+/// `subject`'s attestations. Gated by the `AuditAdminCap`.
+public fun revoke_audit(
+    _: &AuditAdminCap,
+    registry: &mut Registry,
+    subject: ID,
+    rcv: Receiving<Attestation<Audit>>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    registry.revoke(internal::permit<Audit>(), subject, rcv, clock, ctx);
 }
 
 #[test_only]

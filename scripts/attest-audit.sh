@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Issue an Attestation<Audit> about a subject and echo its id. Reusable CLI op
 # over auditor::attest_audit (admin-cap-gated); the AuditAdminCap gates both
-# attest and revoke. The subject's box need not exist yet (only revoke needs it).
+# attest and revoke. No setup is needed for a new subject.
 # <registry> is the shared Registry object id. [report-hash] is the report's
 # digest for the link_hash convention (e.g. sha256:…); omit it to record none.
 #
@@ -16,6 +16,6 @@ else
 fi
 
 sui client ptb \
-    --move-call "$AUDITPKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" "\"$DESC\"" "\"$URL\"" "$HASH_ARG" "$PUBDATE" \
+    --move-call "$AUDITPKG::audit::attest_audit" "@$CAP" "@$REGISTRY" "@$SUBJECT" "\"$DESC\"" "\"$URL\"" "$HASH_ARG" "$PUBDATE" @0x6 \
     --json \
   | jq -r 'first(.objectChanges[] | select(.objectType | contains("::Attestation<")) | .objectId)'

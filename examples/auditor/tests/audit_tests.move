@@ -1,12 +1,13 @@
 #[test_only]
 module auditor::audit_tests;
 
-use attestations::attestations::{Self, Registry, Box, Attestation};
-use auditor::audit::{Self, Audit};
+use attestations::attestations::{Self, Registry, Attestation};
+use auditor::audit::{Self, Audit, AuditAdminCap};
 use std::string::String;
 use std::unit_test::assert_eq;
+use sui::clock::{Self, Clock};
+use sui::derived_object;
 use sui::test_scenario::{Self, Scenario};
-use sui::transfer::Receiving;
 
 const ALICE: address = @0xA11CE;
 
@@ -22,110 +23,105 @@ fun report_hash(): Option<String> {
 
 fun published_at(): u64 { 1_700_000_000_000 }
 
-/// Publish the registry and create `subject`'s active box. Returns the scenario
-/// at a fresh tx, plus the registry's id, which the box-address derivations
-/// need. `attest_audit` borrows the shared registry itself.
-fun setup_with_box(subject: ID): (Scenario, ID) {
+/// Publish the registry. Returns the scenario at a fresh tx, plus the address
+/// `subject`'s attestations live at, derived from the registry's id the way an
+/// off-chain consumer derives it.
+fun setup(subject: ID): (Scenario, address) {
     let mut scenario = test_scenario::begin(ALICE);
     attestations::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
-    let mut registry: Registry = scenario.take_shared();
-    let registry_id = object::id(&registry);
-    registry.create_box(subject);
+    let registry: Registry = scenario.take_shared();
+    let anchor = derived_object::derive_address(object::id(&registry), subject);
     test_scenario::return_shared(registry);
 
     scenario.next_tx(ALICE);
-    (scenario, registry_id)
+    (scenario, anchor)
 }
 
-/// The id form of `subject`'s active or revoked box address.
-fun box_id(registry: ID, subject: ID, revoked: bool): ID {
-    object::id_from_address(attestations::box_address(registry, subject, revoked))
+/// The ids of the audits at `anchor`, live and revoked alike.
+fun audit_ids(anchor: address): vector<ID> {
+    test_scenario::receivable_object_ids_for_owner_id<Attestation<Audit>>(anchor.to_id())
 }
 
-/// The ids of the audits owned by `owner`, which is a box address — no object
-/// need exist there, which is how the revoked address is read.
-fun audit_ids(owner: ID): vector<ID> {
-    test_scenario::receivable_object_ids_for_owner_id<Attestation<Audit>>(owner)
-}
-
-/// Verifies the cross-package attest flow: `auditor::attest_audit` produces an
-/// accessible attestation, and `attester_of<Audit>` returns auditor's package
-/// address — distinct from `attestations`'s.
-#[test]
-fun attest_audit_cross_package() {
-    let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = setup_with_box(subject);
-    let active = box_id(registry, subject, false);
-
-    let admin = audit::new_admin_cap_for_testing(scenario.ctx());
+/// Issue one audit about `subject` through the shared registry.
+fun attest(
+    scenario: &mut Scenario,
+    admin: &AuditAdminCap,
+    subject: ID,
+    report_hash: Option<String>,
+    clock: &Clock,
+) {
     scenario.with_shared!<Registry>(|registry, scenario| {
         admin.attest_audit(
             registry,
             subject,
             description(),
             report_url(),
-            report_hash(),
+            report_hash,
             published_at(),
+            clock,
             scenario.ctx(),
         );
     });
+}
+
+/// Verifies the cross-package attest flow: `auditor::attest_audit` lands a live
+/// attestation about `subject` at the address derived for it.
+#[test]
+fun attest_audit_cross_package() {
+    let subject = subject_for(@0xDEAD);
+    let (mut scenario, anchor) = setup(subject);
+    let clock = clock::create_for_testing(scenario.ctx());
+
+    let admin = audit::new_admin_cap_for_testing(scenario.ctx());
+    attest(&mut scenario, &admin, subject, report_hash(), &clock);
     transfer::public_transfer(admin, ALICE);
 
     scenario.next_tx(ALICE);
-    let ids = audit_ids(active);
+    let ids = audit_ids(anchor);
     assert_eq!(ids.length(), 1);
-    scenario.with_shared_by_id!<Box>(active, |box, _| {
-        let rcv: Receiving<Attestation<Audit>> = test_scenario::receiving_ticket_by_id(ids[0]);
-        let a = box.borrow_for_testing(rcv);
-        assert_eq!(a.subject(), subject);
-        box.put_back_for_testing(a);
-    });
+    let a: Attestation<Audit> = scenario.take_from_address_by_id(anchor, ids[0]);
+    assert_eq!(a.subject(), subject);
+    assert!(a.revoked_at_ms().is_none());
+    test_scenario::return_to_address(anchor, a);
 
-    // attester_of<Audit> must resolve to auditor's package address, not
-    // attestations's.
-    assert!(attestations::attester_of<Audit>() != attestations::attester_of<Registry>());
-
+    clock.destroy_for_testing();
     scenario.end();
 }
 
 /// The admin-cap policy: a holder of `AuditAdminCap` issues then revokes an
-/// audit, moving it from the active box onto the revoked address.
+/// audit. It stays at the subject's address, stamped with the revocation time.
 #[test]
 fun revoke_audit_with_admin_cap() {
     let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = setup_with_box(subject);
-    let active = box_id(registry, subject, false);
-    let revoked = box_id(registry, subject, true);
+    let (mut scenario, anchor) = setup(subject);
+    let mut clock = clock::create_for_testing(scenario.ctx());
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
+    attest(&mut scenario, &admin, subject, report_hash(), &clock);
+
+    scenario.next_tx(ALICE);
+    let id = audit_ids(anchor)[0];
+    clock.set_for_testing(published_at());
     scenario.with_shared!<Registry>(|registry, scenario| {
-        admin.attest_audit(
+        admin.revoke_audit(
             registry,
             subject,
-            description(),
-            report_url(),
-            report_hash(),
-            published_at(),
+            test_scenario::receiving_ticket_by_id(id),
+            &clock,
             scenario.ctx(),
         );
     });
-
-    scenario.next_tx(ALICE);
-    let id = audit_ids(active)[0];
-    scenario.with_shared_by_id!<Box>(active, |box, _| {
-        let rcv: Receiving<Attestation<Audit>> = test_scenario::receiving_ticket_by_id(id);
-        admin.revoke_audit(box, rcv);
-    });
     transfer::public_transfer(admin, ALICE);
 
-    // The audit left the active box for the revoked address (no Box there).
     scenario.next_tx(ALICE);
-    assert!(audit_ids(active).is_empty());
-    assert_eq!(audit_ids(revoked).length(), 1);
-    assert_eq!(audit_ids(revoked)[0], id);
+    assert_eq!(audit_ids(anchor), vector[id]);
+    let a: Attestation<Audit> = scenario.take_from_address_by_id(anchor, id);
+    assert_eq!(a.revoked_at_ms(), option::some(published_at()));
+    test_scenario::return_to_address(anchor, a);
 
+    clock.destroy_for_testing();
     scenario.end();
 }
 
@@ -133,25 +129,16 @@ fun revoke_audit_with_admin_cap() {
 #[test]
 fun attest_audit_without_report_hash() {
     let subject = subject_for(@0xDEAD);
-    let (mut scenario, registry) = setup_with_box(subject);
-    let active = box_id(registry, subject, false);
+    let (mut scenario, anchor) = setup(subject);
+    let clock = clock::create_for_testing(scenario.ctx());
 
     let admin = audit::new_admin_cap_for_testing(scenario.ctx());
-    scenario.with_shared!<Registry>(|registry, scenario| {
-        admin.attest_audit(
-            registry,
-            subject,
-            description(),
-            report_url(),
-            option::none(),
-            published_at(),
-            scenario.ctx(),
-        );
-    });
+    attest(&mut scenario, &admin, subject, option::none(), &clock);
     transfer::public_transfer(admin, ALICE);
 
     scenario.next_tx(ALICE);
-    assert_eq!(audit_ids(active).length(), 1);
+    assert_eq!(audit_ids(anchor).length(), 1);
 
+    clock.destroy_for_testing();
     scenario.end();
 }

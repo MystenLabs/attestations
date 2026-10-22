@@ -8,10 +8,10 @@ reading the code.
 
 A typed attestation registry for Sui. `Attestation<T>` wraps an arbitrary schema
 `T`, and only `T`'s defining module can mint the `Permit<T>` that authorizes
-`attest`, `revoke`, and `register_display`. Each subject has one claimed `Box`
-(the active box) plus a derived revoked address; an attestation's status is
-simply which of the two owns it. Rationale is in `DESIGN.md`; Display field
-conventions in `CONVENTIONS.md`.
+`attest`, `revoke`, and `register_display`. Each subject's attestations live at
+one address derived from the registry and the subject; `revoke` sets an
+attestation's `revoked_at_ms` and leaves it there. Rationale is in `DESIGN.md`;
+Display field conventions in `CONVENTIONS.md`.
 
 ## Layout
 
@@ -59,7 +59,7 @@ then checks that `demo/auditor_*` are still copies of the template.
 `e2e/run.sh` owns the localnet: it publishes everything and runs the demo and
 the template's onboarding guide. Then it runs `cargo test` in `e2e/`, a small
 Rust crate that reads the resulting on-chain state the way a consumer would
-(box addresses derived with `sui-sdk-types`) and checks it, rendered as text,
+(subject addresses derived with `sui-sdk-types`) and checks it, rendered as text,
 against the insta snapshot `e2e/tests/snapshots/attestation_state.snap`. The
 test needs the localnet, so run it through `run.sh`, not alone. When a change to
 that state is intended, the run leaves the new snapshot for `cargo insta review

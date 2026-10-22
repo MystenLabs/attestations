@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# End-to-end demo, composed from the CLI ops in scripts/ (create-box,
-# attest-audit, revoke-audit) plus a few inline `sui client ptb` calls — every
+# End-to-end demo, composed from the CLI ops in scripts/ (attest-audit,
+# revoke-audit) plus a few inline `sui client ptb` calls — every
 # on-chain action here is a plain CLI move-call a user could run by hand.
 #
 # Scenario (mirrors the scenario in demo/README.md):
 #   - the dependency has two published versions (v1, v2); audit v1 (Audit, stays
 #     active) and leave v2 (the latest) unaudited — so the Security page shows the
 #     latest version as unaudited while an older version was audited
-#   - create boxes for the dependency (v1) and the subject (which depends on it)
 #   - audit the subject with AuditV2 (score 95; the live signal)
 #   - audit the subject with v1 Audit (revoked at the end)
 #   - an Audit from Auditor B (a second, untrusted auditor identity) + an
@@ -16,7 +15,7 @@
 #   - revoke the subject's v1 audit
 #   - write demo-ids.json for the MVR seeder
 #
-# Requires: REGISTRY_ID env (the shared Registry used by create_box and attest);
+# Requires: REGISTRY_ID env (the shared Registry used by attest and revoke);
 # packages test-published (Pub.localnet.toml); the active sui client address funded and
 # holding the AuditAdminCap; a GraphQL endpoint for the network (GRAPHQL,
 # default the localnet's :9125).
@@ -43,7 +42,7 @@ for block in open(pubfile).read().split('[[published]]'):
 PY
 }
 
-REGPKG=$(parse_pkg_field attestations published-at)
+REGPKG=$(parse_pkg_field packages/attestations published-at)
 AUDIT=$(parse_pkg_field auditor_a published-at)      # v2/latest id (has audit + audit_v2)
 AUDIT_ORIG=$(parse_pkg_field auditor_a original-id)  # v1 id — defines Audit + AuditAdminCap
 DEP_V1=$(parse_pkg_field dependency_example original-id)   # v1 id (audited)
@@ -93,19 +92,13 @@ PUBDATE=1748736000000   # 2025-06-01
 DEP_REPORT_HASH=sha256:b3c7e89209978ba5144036238115b0b8f1e0b4dda01bb195584e36a1ce67f046
 AUDITOR_C_SUBJ_REPORT_HASH=sha256:09ddf4f54a91585702b79c871be8232e7fb93e3965d49dc88aaecf973bb6f91d
 
-echo "▶ create boxes (dependency v1 + subject)"
-DEP_BOX=$(bash "$OPS/create-box.sh" "$REGPKG" "$REGISTRY" "$DEP_V1")
-SUBJ_BOX=$(bash "$OPS/create-box.sh" "$REGPKG" "$REGISTRY" "$SUBJ")
-echo "  dependency v1 active box: $DEP_BOX"
-echo "  subject active box:       $SUBJ_BOX"
-
 echo "▶ attest_audit on dependency v1 (stays active; v2 the latest, left unaudited)"
 DEP_AUDIT=$(bash "$OPS/attest-audit.sh" "$AUDIT" "$CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — no findings" "https://audits.example.com/dependency-v1.pdf" "$PUBDATE" "$DEP_REPORT_HASH")
 echo "  $DEP_AUDIT"
 
 echo "▶ attest_audit_v2 on subject (score 95, the live signal)"
 SUBJ_AUDIT_V2=$(sui client ptb \
-    --move-call "$AUDIT::audit_v2::attest_audit_v2" "@$CAP" "@$REGISTRY" "@$SUBJ" '"Subject audit (v2) — passed"' '"https://audits.example.com/subject-v1.pdf"' "$PUBDATE" 95 \
+    --move-call "$AUDIT::audit_v2::attest_audit_v2" "@$CAP" "@$REGISTRY" "@$SUBJ" '"Subject audit (v2) — passed"' '"https://audits.example.com/subject-v1.pdf"' "$PUBDATE" 95 @0x6 \
     --json \
   | jq -r 'first(.objectChanges[] | select(.objectType | contains("::AuditV2>")) | .objectId)')
 echo "  $SUBJ_AUDIT_V2"
@@ -121,7 +114,7 @@ echo "▶ Auditor B audit (untrusted identity) + attest_internal_note (both filt
 AUDITOR_B_CAP=$(find_owned "$ADDR" "$AUDITOR_B::audit::AuditAdminCap")
 bash "$OPS/attest-audit.sh" "$AUDITOR_B" "$AUDITOR_B_CAP" "$REGISTRY" "$SUBJ" "Auditor B review" "https://auditor-b.example/r.pdf" "$PUBDATE" >/dev/null
 sui client ptb \
-    --move-call "$AUDIT::audit_v2::attest_internal_note" "@$REGISTRY" "@$SUBJ" '"no Display registered"' \
+    --move-call "$AUDIT::audit_v2::attest_internal_note" "@$REGISTRY" "@$SUBJ" '"no Display registered"' @0x6 \
     >/dev/null
 
 echo "▶ Auditor C audits (a second trusted auditor): subject + dependency v1"
@@ -130,7 +123,7 @@ bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$SUBJ" "S
 bash "$OPS/attest-audit.sh" "$AUDITOR_C" "$AUDITOR_C_CAP" "$REGISTRY" "$DEP_V1" "Dependency audit — clean" "https://auditor-c.example/dependency.pdf" "$PUBDATE" >/dev/null
 
 echo "▶ revoke the subject's v1 audit (the dependency v1 audit stays active)"
-bash "$OPS/revoke-audit.sh" "$AUDIT" "$CAP" "$SUBJ_BOX" "$SUBJ_AUDIT_V1"
+bash "$OPS/revoke-audit.sh" "$AUDIT" "$CAP" "$REGISTRY" "$SUBJ" "$SUBJ_AUDIT_V1"
 
 # Hand-off for the MVR Postgres seeder. All values are object ids, so a plain
 # interpolated heredoc is clearer than building the JSON with a tool. DEMO_IDS

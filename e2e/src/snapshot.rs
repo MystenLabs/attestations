@@ -16,7 +16,6 @@ use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
 use sui_sdk_types::Address;
-use sui_sdk_types::TypeTag;
 use tokio::time::sleep;
 
 use crate::chain::Attestation;
@@ -83,7 +82,7 @@ impl Names {
             }
             if name == "attestations" {
                 // Types are named after the package version that defined
-                // them, and `Attestation` and `BoxKey` are in the first.
+                // them, and `Attestation` is in the first.
                 registry_pkg = Some(pkg.original_id);
             }
         }
@@ -127,8 +126,8 @@ impl Names {
 }
 
 /// Render the attestation state: for each subject in the registry's events,
-/// then each of `extra_subjects`, what is at its active box and revoked
-/// address; then every event, in order.
+/// then each of `extra_subjects`, what is at its address; then every event, in
+/// order.
 pub async fn render(
     chain: &Chain,
     names: &mut Names,
@@ -185,7 +184,7 @@ fn event_counts(subject: Address, events: &[Event]) -> (usize, usize) {
 
 fn consistent(state: &SubjectState, subject: Address, events: &[Event]) -> bool {
     let (attested, revoked) = event_counts(subject, events);
-    state.active.len() + state.revoked.len() == attested && state.revoked.len() == revoked
+    state.live.len() + state.revoked.len() == attested && state.revoked.len() == revoked
 }
 
 fn render_subject(
@@ -195,56 +194,44 @@ fn render_subject(
     names: &mut Names,
 ) -> Result<Vec<String>> {
     let (attested, revoked) = event_counts(subject, events);
+    let object = match &state.object {
+        Some(object_type) => format!("{} object", names.rename(&object_type.to_string())),
+        None => "no object".to_string(),
+    };
     let mut lines = vec![
         format!("== {} ==", names.label(subject)),
         format!("events: {attested} attested, {revoked} revoked"),
+        format!("address ({object})"),
         String::new(),
     ];
 
-    let found = state.active.len() + state.revoked.len();
+    let found = state.live.len() + state.revoked.len();
     if attested > found {
         lines.push(format!(
-            "!! {} attestation(s) announced by events are at neither address",
+            "!! {} attestation(s) announced by events are not at its address",
             attested - found
         ));
     }
     if revoked != state.revoked.len() {
         lines.push(format!(
-            "!! {revoked} revoked by events, but {} at the revoked address",
+            "!! {revoked} revoked by events, but {} with revoked_at_ms set",
             state.revoked.len()
         ));
     }
 
-    lines.extend(render_location(
-        "active box",
-        state.active_object.as_ref(),
-        &state.active,
-        subject,
-        names,
-    )?);
+    lines.extend(render_list("live", &state.live, subject, names)?);
     lines.push(String::new());
-    lines.extend(render_location(
-        "revoked address",
-        state.revoked_object.as_ref(),
-        &state.revoked,
-        subject,
-        names,
-    )?);
+    lines.extend(render_list("revoked", &state.revoked, subject, names)?);
     Ok(lines)
 }
 
-fn render_location(
+fn render_list(
     heading: &str,
-    object_type: Option<&TypeTag>,
     attestations: &[Attestation],
     subject: Address,
     names: &mut Names,
 ) -> Result<Vec<String>> {
-    let found = match object_type {
-        Some(object_type) => format!("{} object", names.rename(&object_type.to_string())),
-        None => "no object".to_string(),
-    };
-    let mut lines = vec![format!("{heading} ({found})")];
+    let mut lines = vec![heading.to_string()];
 
     let mut rendered = attestations
         .iter()
@@ -277,6 +264,17 @@ fn render_attestation(
             names.label(field_subject)
         ));
     }
+    // The timestamps come from the clock, so they differ from run to run:
+    // check them rather than print them.
+    let created = millis(&json["created_at_ms"]);
+    if created.is_none() {
+        lines.push("    !! no created_at_ms".to_string());
+    }
+    if let (Some(created), Some(revoked)) = (created, millis(&json["revoked_at_ms"]))
+        && revoked < created
+    {
+        lines.push("    !! revoked_at_ms is before created_at_ms".to_string());
+    }
     lines.extend(render_fields("data", json["data"].as_object(), names));
 
     let display = attestation.display.as_ref().and_then(Value::as_object);
@@ -290,6 +288,15 @@ fn render_attestation(
         Some(other) => lines.push(format!("    display errors: {other}")),
     }
     Ok(lines)
+}
+
+/// A `u64` milliseconds field, which GraphQL renders as a string.
+fn millis(value: &Value) -> Option<u64> {
+    match value {
+        Value::String(s) => s.parse().ok(),
+        Value::Number(n) => n.as_u64(),
+        _ => None,
+    }
 }
 
 fn render_fields(
