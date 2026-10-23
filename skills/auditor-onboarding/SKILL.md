@@ -12,8 +12,8 @@ compatibility: Requires Bash, Git, a current Sui CLI, jq, curl, Python 3.11+, ne
 
 Guide an auditor from the clean `examples/auditor` template to a verified
 attestation. Complete a testnet rehearsal before proposing a mainnet release.
-This publishes claims about audits the company has performed; it does not
-perform an audit or establish the truth of a claim.
+This publishes an audit that the company has performed, but it does not
+perform an audit.
 
 ## Safety and scope
 
