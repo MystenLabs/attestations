@@ -54,6 +54,15 @@ undo_customizations() {
             sed -e 's|b"Auditor C audit"|b"Audit attestation"|' \
                 -e 's|b"https://raw.githubusercontent.com/MystenLabs/attestations/demo-latest/demo/auditor_c/icon.svg"|b"https://example.com/auditor-icon.svg"|'
             ;;
+        attestations-demo-auditor)
+            # The standalone testnet demo labels its claims as examples and links
+            # to the project instead of using the template's placeholder image.
+            sed -e 's|link hash, project URL,|link hash, image,|' \
+                -e 's|b"project_url"|b"image_url"|' \
+                -e 's|b"Demo audit (no security assurance)"|b"Audit attestation"|' \
+                -e 's|b"DEMO ONLY - no security assurance\. {data\.description}"|b"{data.description}"|' \
+                -e 's|b"https://github\.com/MystenLabs/attestations"|b"https://example.com/auditor-icon.svg"|'
+            ;;
         *)
             cat
             ;;

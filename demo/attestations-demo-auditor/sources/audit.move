@@ -35,7 +35,7 @@ fun init(ctx: &mut TxContext) {
 }
 
 /// One-shot setup: register the append-only `Display<Attestation<Audit>>` with
-/// the full presentation set (name, description, link, link hash, image,
+/// the full presentation set (name, description, link, link hash, project URL,
 /// publish date). Should be called once shortly after publish; aborts on second
 /// call (V2 enforcement via `display_registry`).
 entry fun register_audit_display(
@@ -51,15 +51,15 @@ entry fun register_audit_display(
             b"description".to_string(),
             b"link".to_string(),
             b"link_hash".to_string(),
-            b"image_url".to_string(),
+            b"project_url".to_string(),
             b"published_at".to_string(),
         ],
         vector[
-            b"Audit attestation".to_string(),
-            b"{data.description}".to_string(),
+            b"Demo audit (no security assurance)".to_string(),
+            b"DEMO ONLY - no security assurance. {data.description}".to_string(),
             b"{data.report_url}".to_string(),
             b"{data.report_hash}".to_string(),
-            b"https://example.com/auditor-icon.svg".to_string(),
+            b"https://github.com/MystenLabs/attestations".to_string(),
             b"{data.published_at_ms:ts}".to_string(),
         ],
         ctx,

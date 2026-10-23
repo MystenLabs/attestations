@@ -3,5 +3,6 @@ name = "auditor"
 edition = "2024"
 
 [dependencies]
-# Use the current registry while preparing a fresh testnet deployment.
+# The local package's Published.toml supplies its testnet deployment ID.
+# This avoids the old deployment still resolved by the registry's MVR name.
 attestations = { local = "../../packages/attestations" }
