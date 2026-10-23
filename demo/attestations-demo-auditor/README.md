@@ -18,15 +18,27 @@ and independently configure which attester package identities it trusts.
 
 ## Deployment status
 
-This source is prepared for a **fresh testnet deployment**, not an upgrade of
-the old `@pkg/attestations-demo-auditor` package. It has not been published yet.
-Do not reuse the old package ID, capabilities, or `attestations-demo-auditor/v1`
-source tag.
+Published on **testnet** as a fresh package, not an upgrade of the old
+`@pkg/attestations-demo-auditor` deployment. Source verification passed, and the
+Display is registered with the fields described above.
+
+| Object | ID |
+| --- | --- |
+| Package | `0x1b3a65bc3eb8c2268329a2e91e3b87fc081516676efa6e3361c0d278782a371a` |
+| AuditAdminCap | `0x8bef0e9a5b813dce933c1b149215132d499d34de48718021e923edb421886865` |
+| UpgradeCap | `0x33fc7826fb59ed055b4985ee73ff7e3d736958c5be84887ae0b3ba8ba6217ecd` |
+| Display | `0x7885a15e1a693cc42863fbab0ea3e487b4e960ed22ebeff310f84884e95892b6` |
+
+Publish transaction: `GcwHLMWYUpdbVZeByDNAXMi4twrGLwXcXLd9drhTpcRz`.
+Display registration: `8jEcnR1XTbC3t2ArshaKBYV4dJEC5NVzGeYVnzAJUXFj`.
+See [Published.toml](Published.toml) for the compiler and publication metadata.
+Do not reuse the old deployment's IDs or move its `attestations-demo-auditor/v1`
+source tag. Package publication alone does not update MVR naming or consumer trust.
 
 `Move.toml` uses the local registry package and its committed `Published.toml`
-to resolve the new testnet registry. This avoids waiting for the
-`@mysten/attestations` name update. `Move.lock` records the dependency graph;
-it does not make local source immutable, so verify the dependency before publishing.
+to resolve the testnet registry without an MVR lookup. `Move.lock` records the
+dependency graph; it does not make local source immutable, so verify the
+dependency before publishing.
 
 From the repository root:
 
@@ -36,7 +48,9 @@ bash scripts/check-template.sh
 ```
 
 [DEPLOYMENT.md](DEPLOYMENT.md) contains the preflight, publishing, MVR setup,
-and live/revoked verification steps. Publishing requires separate approval.
+and live/revoked verification steps. For this deployment, reuse the recorded IDs;
+do not repeat publication or Display registration. Further transactions require
+separate approval.
 
 ## Building your own attester
 
