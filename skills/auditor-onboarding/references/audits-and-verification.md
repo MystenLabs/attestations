@@ -54,8 +54,9 @@ sui client --client.env "$NETWORK" ptb --sender "@$ISSUER" \
   --dry-run
 ```
 
-Review the simulation, then execute only after approval, or follow
-[signing and custody](signing-and-custody.md). Save the successful execution JSON
+Review the simulation, then follow
+[signing and custody](signing-and-custody.md) for local or external signing of the
+saved bytes. Execute only after approval. Save the successful execution JSON
 as `attest.json` in this operation's records directory. Extract the created
 `CORE_ORIGINAL::attestations::Attestation<AUDITOR_ORIGINAL::audit::Audit>` object's
 ID and record it with the subject and digest. On a fresh publish,
@@ -78,7 +79,8 @@ sui client --client.env "$NETWORK" ptb --sender "@$ISSUER" \
   --dry-run
 ```
 
-After approval, execute or serialize. Revocation sets `revoked_at_ms`; it neither
+Follow the saved-byte signing flow and execute only after approval.
+Revocation sets `revoked_at_ms`; it neither
 deletes the object nor frees its ID for reuse. A correction needs a new claim,
 and normally revocation of the incorrect one. Do not revoke an arbitrary real
 audit just to demonstrate the flow.
@@ -122,11 +124,14 @@ site runs the same release/configuration as a local checkout.
 1. Select the intended package network. Open the auditor's MVR package page.
    Confirm package ID/version, README, source revision, and links. An auditor
    page is not evidence that a subject's audit is visible.
-2. Open the approved subject's package page/version and its Security view.
+2. Open the auditor's Issued tab, if supported by that deployment. Find both
+   example claim IDs, their subjects, and distinct live/revoked states. Issued
+   visibility is not proof that the auditor is trusted in a subject's Security view.
+3. Open the approved subject's package page/version and its Security view.
    Confirm the displayed auditor identity, claim wording, report link, and live
    state. Check how the revoked example is hidden or distinguished; it must not
    be presented as an active endorsement. The chain still retains it.
-3. Record the actual page URL, network/version selection, and observed results
+4. Record the actual page URL, network/version selection, and observed results
    or screenshot. If browser tools are absent, ask the user to perform these
    checks and supply evidence. Do not mark them passed without observation.
 
@@ -144,6 +149,24 @@ failure. Diagnose those separately. Do not reissue repeatedly or silently edit
 an allowlist. A local preview with explicit test configuration is useful but is
 not proof of visibility on the public site.
 
-Report partial completion honestly: for example, “on-chain claims and MVR package
-metadata verified; public Security visibility pending maintainer approval.”
-Mainnet needs its own trust onboarding even after a successful testnet rehearsal.
+### Maintainer-assisted consumer checks
+
+Auditors do not need to build or modify the MVR frontend to issue claims. If
+maintainers offer a local preview, use the intended release and network. Check
+whether `NEXT_PUBLIC_ATTESTATION_CONFIG` is set: it replaces the **entire**
+checked-in configuration, rather than merging entries. Preserve both networks
+when constructing an override. Also check whether `NEXT_PUBLIC_LOCAL_*` endpoint
+overrides redirect reads. Report presence/expected endpoints without dumping
+unrelated environment values or secrets.
+
+Have maintainers exercise the actual Security and Issued readers with the
+verified claim IDs. Record whether the right core Registry, original auditor
+identity, subject version, revocation states, and rendered Display were returned
+without read errors. A passing query test is not a browser observation, and a
+local preview is not a public deployment.
+
+Report four results separately: chain state, metadata/name resolution, consumer
+queries, and browser rendering. For example: “claims and name resolution
+verified; consumer queries passed locally; public browser visibility pending
+maintainer approval.” Mark checks not performed as pending, not passed. Mainnet
+needs its own trust onboarding even after a successful testnet rehearsal.

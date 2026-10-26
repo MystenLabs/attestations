@@ -2,8 +2,15 @@
 
 Continue with `NETWORK`, `RECORDS`, `AUDITOR_REPO`, `SOURCE_PATH`, `AUDITOR_PKG`,
 and `UPGRADE_CAP` from setup. Collect the desired `MVR_NAME`, such as
-`@acme/audits`, and confirm who controls each required object. Naming is optional
-for issuance itself, but needed for the named-package browser walkthrough.
+`@acme/audits` or `@pkg/acme-audits`, and confirm who controls each required object.
+This is the auditor's name, not the upstream `@mysten/attestations` dependency.
+Naming is optional for issuance itself, but needed for the named-package browser
+walkthrough.
+
+For mainnet, choose the custody path in section 3 before creating PackageInfo.
+If combining creation and binding, complete the source/owner checks below but
+use the combined PTB instead of the standalone creation PTB. Register the
+application first if it has no AppCap yet; never run both creation recipes.
 
 ## 1. Create PackageInfo on the auditor package's network
 
@@ -48,16 +55,25 @@ sui client --client.env "$NETWORK" ptb --sender "@$INFO_SENDER" \
 For an existing deployment, inspect its version and metadata first; do not
 blindly create duplicates or label a later version as version 1. Review the
 variables as data, not shell expressions; never `eval` company-provided text.
-After approval, execute or use the [custody flow](signing-and-custody.md). Extract
+After approval, use the [saved-byte signing flow](signing-and-custody.md). Extract
 the created `::package_info::PackageInfo` ID as `PACKAGE_INFO` and read it back:
 its package address, upgrade-cap ID, source version/revision, and owner must match.
 The `default` name enables reverse resolution only once the name points back to
 this metadata. It does not reserve a name or grant trust.
 
-## 2. Obtain the company's namespace on mainnet
+## 2. Choose a namespace on mainnet
 
-Check whether the company already controls its SuiNS name. Ownership is not the
-same as the address the name resolves to. A company controlling `acme.sui` can
+Choose with the user before creating metadata:
+
+- `@acme/audits`: a branded namespace controlled through `acme.sui`.
+- `@pkg/acme-audits`: an available application name in MVR's public namespace.
+  It requires mainnet gas and creates an AppCap for the chosen custodian, but
+  does not require the auditor to buy or control a SuiNS name. Follow the public
+  registration recipe in section 3 instead of purchasing a namespace.
+
+For a branded namespace, check whether the company already controls its SuiNS
+name. Ownership is not the same as the address the name resolves to. A company
+controlling `acme.sui` can
 register `@acme/audits`; it need not purchase a separate name for each network.
 
 If necessary, open <https://suins.io/> with the user's mainnet wallet. Follow the
@@ -74,8 +90,9 @@ management flow, select the company's namespace and desired package name.
 Review the resulting `@company/package` string before signing. UI labels can
 change; inspect the current page rather than assuming button names.
 
-- A new application needs authorization from the SuiNS owner and creates a
-  mainnet `AppCap`. Record its ID and intended custodian.
+- A new application in a company namespace needs authorization from the SuiNS
+  owner. Public `@pkg` registration uses the shared PublicName instead. Both
+  create a mainnet `AppCap`; record its ID and intended custodian.
 - An existing application needs its AppCap owner. Do not attempt to recreate it
   or assume the publisher also owns the name.
 - Prefer the supported UI for names held in kiosks or for subnames; their
@@ -84,6 +101,43 @@ change; inspect the current page rather than assuming button names.
 - If a multisig/custody owner cannot sign through the UI, build a PTB from the
   documented contract calls and use the custody flow. Never move authority to
   a hot wallet merely to make a dropdown work.
+
+If an existing AppCap is inaccessible, do not overwrite the name or republish
+the auditor package to recover it. Ask the owner to authorize the update, or
+choose an available name with approval. Preserve the old record. If a custody
+request is pending for the old choice, explicitly cancel/reconcile it first.
+
+### Public `@pkg` registration
+
+Check availability in the registry; an API error alone does not prove that a
+name is free. Resolve `@mvr/public-names` and `@mvr/core` on mainnet. Obtain
+`PUBLIC_NAME` (the shared `@pkg` PublicName) and `MVR_REGISTRY` from the official
+[MVR deployment information](https://docs.suins.io/move-registry). Verify their
+types/ownership and that the PublicName's underlying SuiNS registration is
+`pkg.sui`. Do not create or take custody of the shared namespace itself.
+
+Set `APP_SENDER` to the approved registration signer and `APP_OWNER` to the
+intended AppCap recipient. Review the exact name and simulate:
+
+```sh
+curl -fsS https://mainnet.mvr.mystenlabs.com/v1/resolution/@mvr/public-names \
+  >"$RECORDS/public-names-resolution.json"
+PUBLIC_NAMES=$(jq -er '.package_id' "$RECORDS/public-names-resolution.json")
+[[ "$MVR_NAME" == @pkg/* ]]
+APP_NAME=${MVR_NAME#@pkg/}
+test -n "$APP_NAME"
+APP_NAME_ARG=$(jq -cn --arg text "$APP_NAME" '$text')
+sui client --client.env mainnet ptb --sender "@$APP_SENDER" \
+  --move-call "$PUBLIC_NAMES::public_names::create_app" \
+    "@$PUBLIC_NAME" "@$MVR_REGISTRY" "$APP_NAME_ARG" @0x6 --assign cap \
+  --transfer-objects '[cap]' "@$APP_OWNER" \
+  --dry-run
+```
+
+Follow the saved-byte signing flow after approval. Extract the actual AppCap
+from execution and verify its name and owner before attaching either network.
+The [public-name contract](https://github.com/MystenLabs/mvr/blob/main/packages/public_names/sources/public_names.move)
+defines this route; a public namespace is not a consumer trust endorsement.
 
 ### Testnet mapping: mainnet transaction, testnet IDs
 
@@ -94,7 +148,15 @@ that those objects exist on testnet, so verify them there first.
 Resolve `@mvr/core` using the **mainnet** MVR API. Obtain and verify `MVR_REGISTRY`
 from the official naming guide (not the attestation Registry). Set `APP_CAP` and
 `APP_OWNER` from its mainnet object, and confirm the target record is the desired
-name. For an initially absent testnet mapping, the documented PTB is:
+name. Save the resolved package as `MVR_CORE`:
+
+```sh
+curl -fsS https://mainnet.mvr.mystenlabs.com/v1/resolution/@mvr/core \
+  >"$RECORDS/mvr-core-resolution.json"
+MVR_CORE=$(jq -er '.package_id' "$RECORDS/mvr-core-resolution.json")
+```
+
+For an initially absent testnet mapping, simulate:
 
 ```sh
 sui client --client.env mainnet ptb --sender "@$APP_OWNER" \
@@ -117,15 +179,103 @@ supply verified testnet IDs directly via a PTB without transferring that metadat
 
 ### Mainnet binding: permanent
 
-This requires a **mainnet** PackageInfo for the mainnet auditor deployment. It is
-not the `set_network` flow. After explicit confirmation of the package lineage,
-simulate `move_registry::assign_package(registry, app_cap, package_info)` on
-mainnet, then obtain separate approval for its permanent binding.
+This requires the **mainnet** auditor deployment and `NETWORK=mainnet`. Resolve
+`METADATA` and `MVR_CORE` afresh on mainnet; do not carry over testnet metadata
+package IDs. Verify the AppCap's current owner as `APP_OWNER` and the intended
+package lineage. Inspect the existing binding: if already correct, verify it
+instead of resubmitting; if unrelated, stop and choose another name.
 
-An existing mainnet binding cannot be replaced with a fresh package. Inspect it
-and stop if it is unrelated. The AppCap and PackageInfo must be accessible to
-the transaction sender; coordinate their owners rather than assuming a testnet
-pointer-style update works on mainnet. Preserve the existing testnet mapping.
+`assign_package` permanently binds the name to one package lineage. It does not
+make the Move package immutable or change its UpgradeCap policy. Compatible
+upgrades remain possible under that policy, and testnet mappings remain separate.
+
+For ordinary address-owned inputs, these operations require:
+
+| Operation | Required owned inputs accessible to the sender |
+| --- | --- |
+| Create PackageInfo | UpgradeCap |
+| Bind an existing mainnet PackageInfo | AppCap and PackageInfo |
+| Create metadata and bind in one PTB | UpgradeCap and AppCap |
+| Set a testnet mapping on mainnet | AppCap; the testnet IDs are values |
+
+Shared protocol objects and gas are additional inputs. Sponsorship does not
+satisfy ownership of the capabilities. Choose one path:
+
+1. **Create and bind under a common owner.** If no PackageInfo exists and the
+   UpgradeCap and AppCap already share an owner, replace section 1's creation
+   PTB with this version-1 recipe. Set `INFO_OWNER` to the approved final
+   metadata recipient; it need not be the current signer. Leave both capabilities
+   with their current owner.
+
+```sh
+test "$NETWORK" = mainnet
+REPO_ARG=$(jq -cn --arg text "$SOURCE_REPO" '$text')
+PATH_ARG=$(jq -cn --arg text "$SOURCE_PATH" '$text')
+REV_ARG=$(jq -cn --arg text "$SOURCE_REV" '$text')
+NAME_ARG=$(jq -cn --arg text "$MVR_NAME" '$text')
+sui client --client.env mainnet ptb --sender "@$APP_OWNER" \
+  --move-call "$METADATA::package_info::new" "@$UPGRADE_CAP" --assign info \
+  --move-call "$METADATA::git::new" \
+    "$REPO_ARG" "$PATH_ARG" "$REV_ARG" --assign source \
+  --move-call "$METADATA::package_info::set_git_versioning" info 1u64 source \
+  --move-call "$METADATA::package_info::set_metadata" info '"default"' "$NAME_ARG" \
+  --move-call "$MVR_CORE::move_registry::assign_package" \
+    "@$MVR_REGISTRY" "@$APP_CAP" info \
+  --move-call "$METADATA::package_info::transfer" info "@$INFO_OWNER" \
+  --dry-run
+```
+
+2. **Keep UpgradeCap with a different owner.** Its owner runs section 1 with
+   `INFO_OWNER` set to `APP_OWNER`. If PackageInfo already exists under another
+   owner, that owner must approve and simulate its transfer first:
+
+```sh
+sui client --client.env mainnet ptb --sender "@$CURRENT_INFO_OWNER" \
+  --move-call "$METADATA::package_info::transfer" "@$PACKAGE_INFO" "@$APP_OWNER" \
+  --dry-run
+```
+
+After the approved creation/transfer executes, read back PackageInfo and require
+its owner to equal the AppCap owner. That owner can then simulate binding without
+access to the UpgradeCap:
+
+```sh
+sui client --client.env mainnet ptb --sender "@$APP_OWNER" \
+  --move-call "$MVR_CORE::move_registry::assign_package" \
+    "@$MVR_REGISTRY" "@$APP_CAP" "@$PACKAGE_INFO" \
+  --dry-run
+```
+
+3. **Change UpgradeCap custody only if independently approved.** Verify the
+   recipient's control, transfer only the requested cap, and read back ownership,
+   package/version, and upgrade policy. Then use path 1 if metadata is absent,
+   or use path 2 to make existing PackageInfo accessible to the AppCap owner.
+   Do not transfer upgrade authority merely to avoid a metadata-transfer transaction.
+
+Every execution requires the saved-byte signing flow and approval, including
+separate confirmation of the permanent binding. Preserve existing testnet
+mappings, verify actual metadata/capability owners afterward, and never record
+simulated object IDs as deployed.
+
+### Change an existing default name
+
+If a deployment switches to an approved alternative name, inspect its existing
+PackageInfo rather than creating another one. `set_metadata` inserts a key; it
+does not replace it. With `INFO_SENDER` set to the current PackageInfo owner and
+`PACKAGE_INFO`/`METADATA` from its network, replace an existing `default` atomically:
+
+```sh
+NAME_ARG=$(jq -cn --arg text "$MVR_NAME" '$text')
+sui client --client.env "$NETWORK" ptb --sender "@$INFO_SENDER" \
+  --move-call "$METADATA::package_info::unset_metadata" "@$PACKAGE_INFO" '"default"' \
+  --move-call "$METADATA::package_info::set_metadata" "@$PACKAGE_INFO" '"default"' "$NAME_ARG" \
+  --dry-run
+```
+
+If the key is absent, use only `set_metadata`. Obtain approval and follow the
+signing flow; do not execute removal separately. This changes reverse-name
+metadata, not an existing permanent mainnet binding. Verify that the new name
+points back to the same deployment.
 
 ## 4. Verify after indexing
 
@@ -139,9 +289,23 @@ jq -e --arg pkg "$AUDITOR_PKG" --arg info "$PACKAGE_INFO" '
 ' "$RECORDS/auditor-name.json"
 ```
 
-For this fresh deployment, require those exact IDs, source path/revision, and
-version 1. Confirm any pre-existing other-network binding is unchanged. Record
-capability owners and the successful transaction digest before continuing.
+For this fresh deployment, require those exact IDs, source path/revision, default
+name, and version 1. Also verify forward and reverse resolution:
+
+```sh
+curl -fsS "https://$NETWORK.mvr.mystenlabs.com/v1/resolution/$MVR_NAME" \
+  >"$RECORDS/auditor-resolution.json"
+jq -e --arg pkg "$AUDITOR_PKG" '.package_id == $pkg' "$RECORDS/auditor-resolution.json"
+REVERSE_QUERY=$(jq -cn --arg pkg "$AUDITOR_PKG" '{package_ids: [$pkg]}')
+curl -fsS "https://$NETWORK.mvr.mystenlabs.com/v1/reverse-resolution/bulk" \
+  -H 'Content-Type: application/json' --data "$REVERSE_QUERY" \
+  >"$RECORDS/auditor-reverse.json"
+jq -e --arg pkg "$AUDITOR_PKG" --arg name "$MVR_NAME" \
+  '.resolution[$pkg].name == $name' "$RECORDS/auditor-reverse.json"
+```
+
+Confirm any pre-existing other-network binding is unchanged. Record capability
+owners and the successful transaction digest before continuing.
 
 Sources: [PackageInfo management](https://docs.suins.io/move-registry/managing-package-info),
 [maintainer practices](https://docs.suins.io/move-registry/maintainer-practices),

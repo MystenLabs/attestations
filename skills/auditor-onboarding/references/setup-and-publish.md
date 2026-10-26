@@ -65,8 +65,9 @@ Before building:
 
 - Rename `name` in Move.toml and all `auditor::` module/import references in
   **both source and tests**, for example to `acme_audits::`.
-- Keep the `attestations = { r.mvr = "@mysten/attestations" }` dependency after
-  verifying its resolution below. Do not substitute a demo package.
+- Keep the `attestations = { r.mvr = "@mysten/attestations" }` dependency by
+  default. This imports the core registry library; the auditor neither owns nor
+  configures that name. Verify it below. Do not substitute a demo package.
 - Set company-specific Display name and a real HTTPS icon or project URL.
   Preserve the standard description, link, link hash, and date conventions.
 - Write the company's README with its audit policy, contact information, and
@@ -76,7 +77,11 @@ Before building:
 - Ignore `build/` and private operational files. Commit generated Move.lock and
   later Published.toml; do not edit lockfiles by hand.
 
-## 3. Verify the registry deployment
+## 3. Check the upstream dependency and Registry
+
+`@mysten/attestations` belongs to the registry maintainers. It is unrelated to the
+auditor's own MVR name. This check verifies the library the template compiles
+against, not the auditor's naming permissions.
 
 Read the reviewed upstream publication metadata for the selected network:
 
@@ -91,6 +96,14 @@ print(json.dumps(publications[network]))
 PY
 CORE_PKG=$(jq -er '.["published-at"]' "$RECORDS/core-publication.json")
 CORE_ORIGINAL=$(jq -er '.["original-id"]' "$RECORDS/core-publication.json")
+```
+
+For the template's default MVR dependency, require resolution to match that
+release. If lookup fails or differs, stop this dependency route and ask the
+registry maintainers to repair it or supply the pinned alternative below. Do
+not ask the auditor to register or modify `@mysten/attestations`.
+
+```sh
 MVR_API="https://$NETWORK.mvr.mystenlabs.com"
 curl -fsS "$MVR_API/v1/resolution/@mysten/attestations" >"$RECORDS/core-resolution.json"
 jq -e --arg expected "$CORE_PKG" '.package_id == $expected' "$RECORDS/core-resolution.json"
@@ -118,10 +131,33 @@ jq -e --arg type "$CORE_ORIGINAL::attestations::Registry" '
 If historical transaction data is unavailable or multiple Registries exist,
 stop and obtain the intended Registry from a verified maintainer release record.
 
-If MVR still points at an old deployment, stop and request the registry
-maintainer's update. If mainnet is not recorded, stop and ask for a verified
-mainnet release. Do not publish a new core or reuse testnet IDs. Compare the
-manifest/lockfile dependency, on-chain type, and release record before proceeding.
+A missing core deployment is different from a missing name binding. If the
+selected network has no verified deployment, stop and request a maintainer
+release. Never publish another core or reuse testnet IDs.
+
+### Maintainer-supplied alternative when the core name is unavailable
+
+A deployed core can be used before its MVR binding is ready. Only with a
+maintainer-verified release and the user's approval, replace the template's
+`attestations` dependency with the supplied pinned source configuration. For
+example, replace the SHA placeholder in this entry with the reviewed full commit:
+
+```toml
+attestations = { git = "https://github.com/MystenLabs/attestations.git", subdir = "packages/attestations", rev = "<MAINTAINER_VERIFIED_FULL_COMMIT_SHA>" }
+```
+
+The revision must include the core's generated publication metadata for the
+selected network and source matching its deployed bytecode. A pinned local
+checkout with those same records is also supported; preserve its revision and
+make the dependency reproducible for source verification. Do not use a moving
+branch or replace source verification with an unverified address.
+
+Re-pin only the selected environment with
+`sui move update-deps --environment "$NETWORK" --path "$AUDITOR"`. Review the
+generated lockfile and preserve other environments. Continue the Registry checks
+above, tests, and the publish simulation below. Require the simulated publish to
+link the same `CORE_PKG`; the alternative bypasses name lookup, not identity or
+bytecode verification. Record which dependency route was approved.
 
 ## 4. Test, simulate, then request publishing approval
 
@@ -140,11 +176,12 @@ verification with `--skip-dependency-verification` or publish the registry using
 `--with-unpublished-dependencies`. `publish` selects the build environment from
 the network; do not add `--build-env` to that command.
 
-After explicit approval, for a local signer repeat the publish command **without
-`--dry-run`**, saving stdout to `publish.json` and stderr to `publish.log`.
-For custody, use `--serialize-unsigned-transaction` instead and follow
-[signing and custody](signing-and-custody.md); save the executed result as
-`publish.json`. Never retry a timeout without checking the transaction digest.
+After review, use `--serialize-unsigned-transaction` in place of `--dry-run`,
+with an explicit gas coin/budget as described in
+[signing and custody](signing-and-custody.md). Both local and external signers
+must inspect, simulate, and sign those saved bytes. Execute only after approval;
+save the confirmed result as `publish.json` and stderr as `publish.log`.
+Never retry a timeout without checking the approved transaction digest.
 
 ```sh
 jq -e '.effects.status.status == "success"' "$RECORDS/publish.json"
@@ -174,7 +211,8 @@ sui client --client.env "$NETWORK" ptb --sender "@$SENDER" \
   --dry-run
 ```
 
-After approval, execute or serialize the same call. Record its successful digest.
+Use the saved-byte signing flow after review and approval. Record its confirmed
+digest and effects.
 If already registered, inspect it instead of retrying. Verify actual rendered
 fields after issuance; registering the templates alone does not prove rendering.
 

@@ -12,13 +12,14 @@ compatibility: Requires Bash, Git, a current Sui CLI, jq, curl, Python 3.11+, ne
 
 Guide an auditor from the clean `examples/auditor` template to a verified
 attestation. Complete a testnet rehearsal before proposing a mainnet release.
-This publishes an audit that the company has performed, but it does not
-perform an audit.
+This publishes an on-chain claim referencing an externally hosted audit report.
+It neither uploads the report nor performs an audit or verifies its conclusions.
 
 ## Safety and scope
 
-- Ask for explicit approval before publishing, issuing/revoking claims, buying
-  names, setting mappings, transferring capabilities, or submitting signed bytes.
+- Ask for explicit approval before publishing source or packages, issuing/revoking
+  claims, buying names, setting mappings, transferring capabilities, signing, or
+  submitting signed bytes.
   Approval to prepare or simulate a transaction is not approval to execute it.
 - Never request, read, or log private keys, recovery phrases, keystores, or wallet
   passwords. First-time wallet setup/key generation belongs in the user's private
@@ -36,8 +37,9 @@ perform an audit.
 
 Ask only for missing information, in small steps:
 
-- Company name, desired MVR name (for example `@acme/audits`), and whether it
-  controls the corresponding mainnet SuiNS name (`acme.sui`).
+- Company name and desired MVR name: a branded namespace such as `@acme/audits`
+  requires control of `acme.sui`; an available public `@pkg/acme-audits` does not.
+  Neither requires ownership of the upstream `@mysten/attestations` name.
 - Workspace, company source repository, package path, and reviewed source commit.
 - Publishing address and custody choices for UpgradeCap, AuditAdminCap,
   PackageInfo, and the mainnet MVR AppCap. These owners may differ.
@@ -59,7 +61,8 @@ directory. Each reference declares the variables it needs.
 1. **Prepare the auditor package.** Follow
    [setup and publishing](references/setup-and-publish.md). Clone the upstream
    repository, create a company-owned copy, customize source/tests/Display/README,
-   and fund the chosen testnet address. Verify the core dependency and Registry.
+   and fund the chosen testnet address. Verify the upstream library dependency and
+   existing Registry; core name maintenance belongs to the registry maintainers.
    **Gate:** tests and publish simulation pass against the intended deployment.
 2. **Publish and register Display.** Review the release and estimated fee with
    the user. Publish only after approval; record and verify all created objects.
@@ -68,16 +71,17 @@ directory. Each reference declares the variables it needs.
 3. **Set metadata, custody, and naming.** Follow
    [MVR registration](references/mvr-registration.md) and
    [signing and custody](references/signing-and-custody.md). Create PackageInfo
-   for this deployment, pin public source, and link the company's MVR name.
-   **Gate:** source metadata and name resolution identify the intended package;
+   for this deployment, pin public source, and link the company's MVR name. Choose
+   the mainnet custody path before creating metadata; transfers need approval.
+   **Gate:** source metadata and forward/reverse resolution identify the package;
    capability ownership matches the user's decisions.
 4. **Issue, revoke, and inspect.** Follow
    [audits and verification](references/audits-and-verification.md). On testnet,
    issue two clearly labeled examples and revoke one, with approval.
    **Gate:** both objects exist; only the revoked one has `revoked_at_ms` set;
    Display renders without errors.
-5. **Verify in the browser.** Check the auditor package page and the subject's
-   Security view on the intended network at <https://www.moveregistry.com>.
+5. **Verify in the browser.** Check the auditor package page and Issued tab, and
+   the subject's Security view, on the intended network at <https://www.moveregistry.com>.
    **Gate:** report what was actually observed. Public Security visibility also
    requires the deployed consumer to support the network and trust this auditor.
 6. **Propose mainnet separately.** Repeat the verified steps with mainnet gas,
@@ -87,11 +91,15 @@ directory. Each reference declares the variables it needs.
 
 ## Stop conditions
 
-- Missing or mismatched core deployment, Registry, dependency resolution, signer,
-  capability owner, source verification, or failed simulation: stop before writes.
+- Stop before writes if the core deployment, Registry, resolved/pinned dependency,
+  signer, capability owner, source verification, or simulation cannot be verified.
   The checkout's `packages/attestations/Published.toml` is a starting point, not
-  proof by itself. If it lacks mainnet, obtain a maintainer-verified deployment
-  before proceeding; never substitute testnet IDs.
+  proof by itself. If the core name is unavailable, ask its maintainers to fix
+  resolution or supply a verified pinned dependency. Do not ask auditors to
+  register or modify that upstream name. Stop if no verified deployment exists;
+  never substitute testnet IDs.
+- A saved-byte digest that differs from simulation or execution is a stop condition.
+  Do not accept a replacement digest or rebuild while a custody request is pending.
 - A new PackageInfo is needed for a fresh package identity, not for every audit.
   An upgrade within a lineage normally adds source metadata for its new version.
 - SuiNS registration and MVR name management take place on **mainnet**, including
@@ -108,5 +116,7 @@ directory. Each reference declares the variables it needs.
 
 Report the network, company name, package and Registry IDs, source revision,
 capability custody, PackageInfo/name resolution, live/revoked claim IDs, and
-observed browser results. Separate completed, pending-signature, and blocked
-steps. Do not claim production readiness from a testnet-only rehearsal.
+observed browser results. Distinguish chain state, metadata/name resolution,
+consumer-query checks, and browser observation. Mark each completed,
+pending-signature, blocked, or not checked. Do not claim production readiness
+from a testnet-only rehearsal.
