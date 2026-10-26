@@ -67,16 +67,19 @@ expiration (see CONVENTIONS.md).
 
 Testnet:
 
-- registry package —
-  `0x6e0e1141d77448253ab434b008a01259e81c5c31bd1cdac8922a5256da690c09`
-  (defines the `Attestation<T>` and `BoxKey` types)
-- `Registry` object —
-  `0x5a8a789c0385d5e891519612a7d3d8ab36f1d9fc03d63cdabf1cefb3d848b568`
-  (the parent every box address is derived from)
+- Registry package:
+  `0x754da52dba4429dc141b4298c5afebb4697d7ff74a15580c0f3074f3f33f79e5`
+- Shared `Registry`:
+  `0x333d2e0d4eba57451e942bfc1ebffd0d4daf599ff719bab556e2882109df4db3`
 
-This testnet deployment predates the code in this directory: its `attest` takes
-the registry's bare id, and its `revoke` moves an attestation to a second derived
-address instead of setting `revoked_at_ms`. It will be replaced by a fresh
-publish.
+Mainnet:
 
-Not yet published on mainnet.
+- Registry package:
+  `0xf918b2fc17085f4e48021be94ee43f9cc4437256acfd085f1e3d1a54d11f6e7b`
+- Shared `Registry`:
+  `0x86875cdb65149c3a1c9653486c09ef7846a751823bb2a96d434fd01fbd4b052e`
+
+Both deployments use the current revocation model described above. See
+[Published.toml](Published.toml) for compiler and publication metadata and
+[MAINNET.md](../../MAINNET.md) for mainnet transaction IDs, custody, and pending
+MVR setup. The mainnet MVR name is not yet assigned.

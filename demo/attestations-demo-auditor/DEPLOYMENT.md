@@ -5,8 +5,9 @@ registry. This runbook does not authorize deployment: obtain approval for the
 release commit and publishing wallet before running the publish step.
 
 The old demo and its attestations remain on-chain. This deployment does not
-upgrade or migrate them. Do not publish this demonstration attester on mainnet
-or add it to a mainnet trust list.
+upgrade or migrate them. This runbook uses testnet IDs throughout. The separately
+approved mainnet publication is recorded in [MAINNET.md](../../MAINNET.md);
+do not reuse these testnet commands or IDs for that rollout.
 
 ## 1. Verify the release
 
@@ -178,9 +179,9 @@ In the MVR repository, update the **testnet** entry in
   Omit `iconUrl` to use the consumer's fallback avatar.
 
 Replace the obsolete demo identity if present; preserve unrelated trusted
-attesters and network entries. Do not add this demo under mainnet. A configured
-environment override replaces the checked-in config, so inspect it before
-redeploying the app.
+attesters and network entries. Do not copy these testnet IDs into mainnet
+configuration; use the separate mainnet deployment record. A configured environment
+override replaces the checked-in config, so inspect it before redeploying the app.
 
 Query `https://graphql.testnet.sui.io/graphql` for type
 `CORE::attestations::Attestation<DEMO_PKG::audit::Audit>` using the query in
