@@ -47,8 +47,11 @@ even if the package being named is on testnet. Use a distinct output directory
 `TX_DIR` per operation, outside source control. For this flow, select an explicit
 SUI gas coin and budget: add `--gas-coin "@$GAS_COIN" --gas-budget "$GAS_BUDGET"`
 to PTBs, or `--gas "$GAS_COIN" --gas-budget "$GAS_BUDGET"` to `publish`.
-Verify the coin's owner, balance, version, and digest. A separate gas sponsor
-requires that sponsor's signature too.
+This recipe supports **sender-funded transactions only**: require the gas coin's
+owner to equal `TX_SENDER`, and verify its balance, version, and digest. Stop if
+the operation requires a separate gas sponsor. The verification command below
+checks only the sender's signature, and the submission recipe supplies only that
+signature; it does not implement sponsored signing.
 
 With CLI 1.82.1, address-balance-funded transactions produced different saved-byte,
 simulation, and execution digests in an observed rollout. Do not assume
@@ -99,9 +102,10 @@ Stop on a failed command, failed simulation, unexpected response format, or
 mismatched digest. Do not replace the independently calculated digest with the
 CLI's answer. Use a supported toolchain or investigate before signing.
 Review all decoded inputs and commands, sender, gas owner/coin/budget/price, and
-expiration, including any epoch limits and nonce. Require the explicit gas coin
-you selected and only the intended effects; matching digests alone do not prove
-that the transaction is authorized or correct.
+expiration, including any epoch limits and nonce. Require both the decoded sender
+and gas owner to equal `TX_SENDER`, the explicit gas coin you selected, and only
+the intended effects. Stop before signing if either address differs; matching
+digests alone do not prove that the transaction is authorized or correct.
 
 Give custody the bytes, digest, decoded transaction, CLI version, network/chain
 ID, current sender, gas owner/coin/budget, expiration, intended changes, and
@@ -133,8 +137,8 @@ Otherwise, set `SIGNATURE` to custody's base64 serialized Sui signature:
 sui keytool decode-or-verify-tx --tx-bytes "$TX_BYTES" --sig "$SIGNATURE" --json
 ```
 
-Inspect the result and require successful verification for the expected sender
-(and sponsor, if any). After explicit execution approval:
+Inspect the result and require successful verification for the expected sender.
+After explicit execution approval:
 
 ```sh
 sui client --client.env "$TX_NETWORK" execute-signed-tx \
