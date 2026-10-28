@@ -55,7 +55,7 @@ sui client --client.env "$NETWORK" ptb --sender "@$INFO_SENDER" \
 For an existing deployment, inspect its version and metadata first; do not
 blindly create duplicates or label a later version as version 1. Review the
 variables as data, not shell expressions; never `eval` company-provided text.
-After approval, use the [saved-byte signing flow](signing-and-custody.md). Extract
+After approval, follow [signing and custody](signing-and-custody.md). Extract
 the created `::package_info::PackageInfo` ID as `PACKAGE_INFO` and read it back:
 its package address, upgrade-cap ID, source version/revision, and owner must match.
 The `default` name enables reverse resolution only once the name points back to
@@ -134,8 +134,9 @@ sui client --client.env mainnet ptb --sender "@$APP_SENDER" \
   --dry-run
 ```
 
-Follow the saved-byte signing flow after approval. Extract the actual AppCap
-from execution and verify its name and owner before attaching either network.
+Follow [signing and custody](signing-and-custody.md) after approval. Extract the
+actual AppCap from execution and verify its name and owner before attaching
+either network.
 The [public-name contract](https://github.com/MystenLabs/mvr/blob/main/packages/public_names/sources/public_names.move)
 defines this route; a public namespace is not a consumer trust endorsement.
 
@@ -252,10 +253,10 @@ sui client --client.env mainnet ptb --sender "@$APP_OWNER" \
    or use path 2 to make existing PackageInfo accessible to the AppCap owner.
    Do not transfer upgrade authority merely to avoid a metadata-transfer transaction.
 
-Every execution requires the saved-byte signing flow and approval, including
-separate confirmation of the permanent binding. Preserve existing testnet
-mappings, verify actual metadata/capability owners afterward, and never record
-simulated object IDs as deployed.
+Every execution follows [signing and custody](signing-and-custody.md) and needs
+approval, including separate confirmation of the permanent binding. Preserve
+existing testnet mappings, verify actual metadata/capability owners afterward,
+and never record simulated object IDs as deployed.
 
 ### Change an existing default name
 

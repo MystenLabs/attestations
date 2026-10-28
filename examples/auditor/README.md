@@ -34,7 +34,9 @@ Duplicate this package and make it yours. The required changes are small:
 - Verify that the existing `@mysten/attestations` MVR dependency resolves to the
   intended registry deployment on the selected network.
 - Set your presentation in `register_audit_display`: your display `name`, your
-  report/brand icon (`image_url`), and the report-link template.
+  report/brand icon (`image_url`), and the report-link template. Get these right
+  before publishing: anyone can call `register_audit_display` once the package
+  is live, it succeeds only once, and the values can't be changed afterwards.
 - Replace this README with your auditing policy, or a link to it — it renders
   on your package's MVR page, so it's what others read to decide to trust you.
 
@@ -54,9 +56,11 @@ sui move test --build-env testnet --lint --warnings-are-errors
 sui client publish --dry-run
 ```
 
-After approval, publish with `sui client publish` or use the skill's external
-signing workflow. A later mainnet release requires its own verified registry
-deployment, gas, capabilities, and metadata; never reuse testnet IDs.
+After approval, publish with `sui client publish` from a key in your local
+keystore. It records the deployment in `Published.toml`; to hold the capabilities
+in a multisig, transfer them afterwards (step 3). A later mainnet release
+requires its own verified registry deployment, gas, capabilities, and metadata;
+never reuse testnet IDs.
 
 From the output, note three ids you'll need:
 

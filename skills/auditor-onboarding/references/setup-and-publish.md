@@ -68,8 +68,10 @@ Before building:
 - Keep the `attestations = { r.mvr = "@mysten/attestations" }` dependency by
   default. This imports the core registry library; the auditor neither owns nor
   configures that name. Verify it below. Do not substitute a demo package.
-- Set company-specific Display name and a real HTTPS icon or project URL.
-  Preserve the standard description, link, link hash, and date conventions.
+- Set company-specific Display name and a real HTTPS icon or project URL in
+  `register_audit_display`. Preserve the standard description, link, link hash,
+  and date conventions. These values are compiled into the package, so they are
+  final once it is published.
 - Write the company's README with its audit policy, contact information, and
   report interpretation. MVR will use this source repository, not our template's.
 - Retain authorization/revocation tests. Additional schema fields require their
@@ -161,6 +163,15 @@ bytecode verification. Record which dependency route was approved.
 
 ## 4. Test, simulate, then request publishing approval
 
+Publish with `sui client publish`. It signs with `SENDER`'s key in the user's
+local keystore and records the deployment in the package's `Published.toml`, so
+`SENDER` must be a local key, not a multisig or external custody address. To
+keep the capabilities in custody, publish from a local key and transfer them
+afterwards, as described in [signing and custody](signing-and-custody.md).
+
+The CLI pays from `SENDER`'s SUI coins or address balance, so there is no gas
+coin to choose:
+
 ```sh
 (cd "$AUDITOR" && sui move test --build-env "$NETWORK" --lint --warnings-are-errors)
 sui client --client.env "$NETWORK" publish "$AUDITOR" --sender "$SENDER" \
@@ -171,38 +182,65 @@ jq -e --arg core "$CORE_PKG" '
 ' "$RECORDS/publish-dry-run.json"
 ```
 
-Review costs, dependency IDs, source diff, and sender with the user. Do not bypass
-verification with `--skip-dependency-verification`. `publish` selects the build
-environment from the network; do not add `--build-env` to that command.
+Review costs, dependency IDs, source diff, and sender with the user. Include
+every Display field and value in `register_audit_display`:
+this is the last point at which they can change. The function takes no
+capability, so once the package is live anyone can register those values, and
+registration succeeds only once. An upgrade does not help, because the published
+version stays callable. Do not bypass verification with
+`--skip-dependency-verification`. `publish` selects the build environment from
+the network; do not add `--build-env` to that command.
 
-After review, use `--serialize-unsigned-transaction` in place of `--dry-run`,
-with an explicit gas coin/budget as described in
-[signing and custody](signing-and-custody.md). Both local and external signers
-must inspect, simulate, and sign those saved bytes. Execute only after approval;
-save the confirmed result as `publish.json` and stderr as `publish.log`.
-Never retry a timeout without checking the approved transaction digest.
+After explicit approval, run the same command without `--dry-run`. Do not change
+the source in between.
 
 ```sh
+sui client --client.env "$NETWORK" publish "$AUDITOR" --sender "$SENDER" \
+  --json >"$RECORDS/publish.json" 2>"$RECORDS/publish.log"
 jq -e '.effects.status.status == "success"' "$RECORDS/publish.json"
 AUDITOR_PKG=$(jq -er 'first(.objectChanges[] | select(.type == "published") | .packageId)' "$RECORDS/publish.json")
 ADMIN_CAP=$(jq -er 'first(.objectChanges[] | select(.type == "created" and (.objectType | endswith("::audit::AuditAdminCap"))) | .objectId)' "$RECORDS/publish.json")
 UPGRADE_CAP=$(jq -er 'first(.objectChanges[] | select(.type == "created" and (.objectType | endswith("::package::UpgradeCap"))) | .objectId)' "$RECORDS/publish.json")
 ```
 
+Running `publish` again builds a new transaction, so a retry after a timeout can
+publish a second package. If the command times out, do not publish again until
+you know whether it executed: list `SENDER`'s UpgradeCaps and look for a package
+missing from your records, retrying for a few minutes to allow for indexing lag.
+
+```sh
+CAPS_QUERY=$(jq -n --arg owner "$SENDER" '{
+  query: "query($owner: SuiAddress!) { address(address: $owner) { objects(filter: {type: \"0x2::package::UpgradeCap\"}) { nodes { address contents { json } } } } }",
+  variables: {owner: $owner}
+}')
+curl -fsS "https://graphql.$NETWORK.sui.io/graphql" -H 'Content-Type: application/json' \
+  --data "$CAPS_QUERY" | jq -c '.data.address.objects.nodes[] | {cap: .address, package: .contents.json.package}'
+```
+
+Check that the CLI recorded this publish in `Published.toml`:
+
+```sh
+python3 - "$AUDITOR/Published.toml" "$NETWORK" "$AUDITOR_PKG" "$UPGRADE_CAP" <<'PY'
+import pathlib, sys, tomllib
+path, network, package, cap = sys.argv[1:]
+entry = tomllib.loads(pathlib.Path(path).read_text()).get('published', {}).get(network, {})
+if (entry.get('published-at'), entry.get('original-id'), entry.get('upgrade-capability')) != (package, package, cap):
+    raise SystemExit('STOP: Published.toml does not record this publish for ' + network)
+PY
+```
+
+If the entry is missing or differs, stop; do not republish to regenerate it.
 Record the digest, these IDs, their owners, and the original package ID (equal
-to `AUDITOR_PKG` on a fresh publish). With external signing, check whether the
-CLI persisted publication metadata; if not, stop and reconcile Published.toml
-with the confirmed transaction and captured build settings using the toolchain's
-documented format. Preserve any other network's entries. Do not invent a recovery
-command or republish to obtain a missing local file. Verify source with
+to `AUDITOR_PKG` on a fresh publish). Verify source with
 `sui client --client.env "$NETWORK" verify-source "$AUDITOR"`. Commit the
 verified publication metadata and push the exact source before MVR setup.
 Reformatting Move source after publication can change compiled abort metadata.
 
 ## 5. Register Display
 
-Review every template first. Registration is one-shot for this type and existing
-fields cannot be replaced. Simulate with a funded sender on the same network:
+The templates were fixed and reviewed before publishing (step 4). Registration is
+one-shot for this type and existing fields cannot be replaced. Any funded sender
+on the same network can register them; simulate first:
 
 ```sh
 sui client --client.env "$NETWORK" ptb --sender "@$SENDER" \
@@ -210,8 +248,8 @@ sui client --client.env "$NETWORK" ptb --sender "@$SENDER" \
   --dry-run
 ```
 
-Use the saved-byte signing flow after review and approval. Record its confirmed
-digest and effects.
+After review and approval, follow [signing and custody](signing-and-custody.md).
+Record its confirmed digest and effects.
 If already registered, inspect it instead of retrying. Verify actual rendered
 fields after issuance; registering the templates alone does not prove rendering.
 

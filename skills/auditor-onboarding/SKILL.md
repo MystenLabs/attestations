@@ -41,8 +41,9 @@ Ask only for missing information, in small steps:
   requires control of `acme.sui`; an available public `@pkg/acme-audits` does not.
   Neither requires ownership of the upstream `@mysten/attestations` name.
 - Workspace, company source repository, package path, and reviewed source commit.
-- Publishing address and custody choices for UpgradeCap, AuditAdminCap,
-  PackageInfo, and the mainnet MVR AppCap. These owners may differ.
+- Publishing address, which must be a key in the user's local keystore because
+  `sui client publish` signs with it, and custody choices for UpgradeCap,
+  AuditAdminCap, PackageInfo, and the mainnet MVR AppCap. These owners may differ.
 - A company-controlled or explicitly approved testnet subject. Later, collect
   the exact production package/version audited, report URL, optional digest,
   publication time, and claim wording. Never invent an audit result.
@@ -50,8 +51,9 @@ Ask only for missing information, in small steps:
 Keep a non-secret deployment record **separately for each network**: CLI/source
 versions, core package/original ID and Registry, auditor package/original ID,
 capability IDs and owners, PackageInfo, MVR AppCap, transaction digests,
-attestation IDs, browser evidence, and unresolved checkpoints. Preserve pending
-transaction bytes exactly; check transaction status before retrying a timeout.
+attestation IDs, browser evidence, and unresolved checkpoints. Keep bytes pending
+with custody unchanged, and check whether a timed-out transaction executed before
+running it again.
 
 ## Workflow and gates
 
@@ -64,8 +66,10 @@ directory. Each reference declares the variables it needs.
    and fund the chosen testnet address. Verify the upstream library dependency and
    existing Registry; core name maintenance belongs to the registry maintainers.
    **Gate:** tests and publish simulation pass against the intended deployment.
-2. **Publish and register Display.** Review the release and estimated fee with
-   the user. Publish only after approval; record and verify all created objects.
+2. **Publish and register Display.** Review the release, including its Display
+   values, and the estimated fee with the user. Those values are final at publish:
+   anyone can register them afterwards. Publish with `sui client publish` only
+   after approval; record and verify all created objects.
    Register the reviewed Display once. Existing Display fields cannot be replaced.
    **Gate:** deployed bytecode matches the source and Display registration succeeds.
 3. **Set metadata, custody, and naming.** Follow
@@ -98,8 +102,8 @@ directory. Each reference declares the variables it needs.
   resolution or supply a verified pinned dependency. Do not ask auditors to
   register or modify that upstream name. Stop if no verified deployment exists;
   never substitute testnet IDs.
-- A saved-byte digest that differs from simulation or execution is a stop condition.
-  Do not accept a replacement digest or rebuild while a custody request is pending.
+- Do not rebuild a transaction while a custody request for it is pending; cancel
+  that request first.
 - A new PackageInfo is needed for a fresh package identity, not for every audit.
   An upgrade within a lineage normally adds source metadata for its new version.
 - SuiNS registration and MVR name management take place on **mainnet**, including

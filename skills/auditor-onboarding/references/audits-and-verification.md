@@ -55,8 +55,8 @@ sui client --client.env "$NETWORK" ptb --sender "@$ISSUER" \
 ```
 
 Review the simulation, then follow
-[signing and custody](signing-and-custody.md) for local or external signing of the
-saved bytes. Execute only after approval. Save the successful execution JSON
+[signing and custody](signing-and-custody.md) to run it from a local key or have
+custody sign it. Execute only after approval. Save the successful execution JSON
 as `attest.json` in this operation's records directory. Extract the created
 `CORE_ORIGINAL::attestations::Attestation<AUDITOR_ORIGINAL::audit::Audit>` object's
 ID and record it with the subject and digest. On a fresh publish,
@@ -79,9 +79,9 @@ sui client --client.env "$NETWORK" ptb --sender "@$ISSUER" \
   --dry-run
 ```
 
-Follow the saved-byte signing flow and execute only after approval.
-Revocation sets `revoked_at_ms`; it neither
-deletes the object nor frees its ID for reuse. A correction needs a new claim,
+Follow [signing and custody](signing-and-custody.md) and execute only after
+approval. Revocation sets `revoked_at_ms`; it neither deletes the object nor
+frees its ID for reuse. A correction needs a new claim,
 and normally revocation of the incorrect one. Do not revoke an arbitrary real
 audit just to demonstrate the flow.
 
