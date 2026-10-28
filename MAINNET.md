@@ -38,15 +38,26 @@ commit `5e613501cb22e3f07f778cff2ba5facebdf70fa8`. Each package's generated
 `Move.lock` and `Published.toml` record its mainnet dependency graph and publication.
 Existing testnet entries are preserved.
 
-The publishing wallet retains both UpgradeCaps and the demo AuditAdminCap:
+The core UpgradeCap was transferred to the wallet that owns the
+`@mysten/attestations` AppCap:
+
+```text
+0xa81a2328b7bbf70ab196d6aca400b5b0721dec7615bf272d95e0b0df04517e72
+```
+
+Transfer transaction: `2s5FvGdva73xuCxv1KKE8yVfuUGRSnfKUmos9wyHRtAd`.
+Actual transfer charge: **0.000100163 SUI**. Ownership was read back and verified;
+the capability's package, version, and policy are unchanged.
+
+The publishing wallet retains the demo UpgradeCap and AuditAdminCap:
 
 ```text
 0x893a5a7204dba4129790af587da6b99f8dabcfa64415c5c1d1295af9726a3512
 ```
 
-Both UpgradeCaps retain the default compatible policy. No custody migration or
-policy restriction has been executed. The shared Registry is a protocol object,
-not a capability to transfer.
+Both UpgradeCaps retain the default compatible policy. Final multisig migration
+remains pending. The shared Registry is a protocol object, not a capability to
+transfer.
 
 Verify the existing deployments without publishing again:
 
@@ -69,8 +80,7 @@ Publication is complete; the following mainnet steps remain pending:
   explicitly labeled examples about the demo package itself, and revoke one.
 - Verify consumer reads and browser rendering before migrating custody.
 
-The core name's AppCap belongs to a different wallet from the publisher.
-Mainnet `assign_package` requires the AppCap and PackageInfo under the same
-signer's authority. Resolve that ownership and signing arrangement before
-binding; changing the transaction sender or sponsoring gas does not grant
-access to another wallet's objects.
+The core name's AppCap and core UpgradeCap now have the same custody owner.
+That signer can create PackageInfo, set its source metadata, permanently assign
+the name, and transfer the new PackageInfo to its chosen owner in one PTB.
+The source revision must be publicly available before preparing that transaction.
