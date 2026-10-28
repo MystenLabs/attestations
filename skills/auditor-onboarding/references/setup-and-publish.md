@@ -172,9 +172,8 @@ jq -e --arg core "$CORE_PKG" '
 ```
 
 Review costs, dependency IDs, source diff, and sender with the user. Do not bypass
-verification with `--skip-dependency-verification` or publish the registry using
-`--with-unpublished-dependencies`. `publish` selects the build environment from
-the network; do not add `--build-env` to that command.
+verification with `--skip-dependency-verification`. `publish` selects the build
+environment from the network; do not add `--build-env` to that command.
 
 After review, use `--serialize-unsigned-transaction` in place of `--dry-run`,
 with an explicit gas coin/budget as described in
