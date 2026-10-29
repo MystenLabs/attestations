@@ -61,6 +61,27 @@ sit in the Display layer per `CONVENTIONS.md` — the registry itself stays mini
 dependency to its dependents — are a planned fast-follow, not in this positive
 MVP.)
 
+## Auditor onboarding
+
+Start with the [auditor template](examples/auditor/README.md) to issue your own
+company's audit attestations. The installable
+[auditor-onboarding skill](skills/auditor-onboarding/SKILL.md) guides an agent
+through testnet setup, publishing, capability custody, SuiNS/MVR registration,
+issuance, revocation, and browser verification before a separate mainnet rollout.
+
+Install it with the [skills CLI](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add MystenLabs/attestations --skill auditor-onboarding
+```
+
+From a local checkout, use `npx skills add ./skills/auditor-onboarding` instead.
+Choose your agent when prompted. Alternatively, copy the entire
+`skills/auditor-onboarding` directory into your agent's supported skills directory;
+keep its `references/` folder beside `SKILL.md`. No other skills are required.
+The workflow requires user approval before transactions and does not automatically
+grant inclusion in Move Registry's trusted-attester list.
+
 ## Building and testing
 
 ```bash

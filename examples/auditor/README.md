@@ -8,7 +8,9 @@ not from the transaction signer. (Why that holds, and how consumers read and
 revoke attestations, is the registry's concern — see the registry repo's
 `DESIGN.md`.)
 
-This README walks a new auditor from the template to publishing live reports.
+This README walks a new auditor through a testnet rehearsal. For agent-guided
+setup, naming, custody, browser verification, and a later mainnet rollout, use the
+[auditor-onboarding skill](../../skills/auditor-onboarding/SKILL.md).
 
 ## What's in the package
 
@@ -27,12 +29,14 @@ The Move code (`sources/audit.move`) defines three things you'll work with:
 
 Duplicate this package and make it yours. The required changes are small:
 
-- Rename the package — `name` in `Move.toml`, and the `auditor::` prefix on the
-  `module` line in `audit.move` (e.g. `module acme_audits::audit;`).
-- Point the `attestations` dependency in `Move.toml` at the published registry
-  (via its mvr name) rather than the local path this template uses.
+- Rename the package: `name` in `Move.toml` and every `auditor::` module/import
+  reference in both source and tests (e.g. `module acme_audits::audit;`).
+- Verify that the existing `@mysten/attestations` MVR dependency resolves to the
+  intended registry deployment on the selected network.
 - Set your presentation in `register_audit_display`: your display `name`, your
-  report/brand icon (`image_url`), and the report-link template.
+  report/brand icon (`image_url`), and the report-link template. Get these right
+  before publishing: anyone can call `register_audit_display` once the package
+  is live, it succeeds only once, and the values can't be changed afterwards.
 - Replace this README with your auditing policy, or a link to it — it renders
   on your package's MVR page, so it's what others read to decide to trust you.
 
@@ -43,12 +47,20 @@ registry and general consumers only act on the standard Display conventions
 
 ### 2. Publish and register
 
-Publish the package on mainnet:
+Start with a funded testnet address. Verify the registry dependency, build and
+test the package, then simulate publishing before approving the transaction:
 
 ```sh
-sui client switch --env mainnet
-sui client publish
+sui client switch --env testnet
+sui move test --build-env testnet --lint --warnings-are-errors
+sui client publish --dry-run
 ```
+
+After approval, publish with `sui client publish` from a key in your local
+keystore. It records the deployment in `Published.toml`; to hold the capabilities
+in a multisig, transfer them afterwards (step 3). A later mainnet release
+requires its own verified registry deployment, gas, capabilities, and metadata;
+never reuse testnet IDs.
 
 From the output, note three ids you'll need:
 
@@ -57,8 +69,8 @@ From the output, note three ids you'll need:
   Objects*, matched by the object types ending `::audit::AuditAdminCap` and
   `0x2::package::UpgradeCap`. Both were sent to you; custody them in step 3.
 
-You'll also need the shared **`Registry`** object id from the registry's mainnet
-deployment. Use it to register your Display, issue reports, and revoke them.
+You'll also need the shared **`Registry`** object id from the registry's deployment
+on the same network. Use it to register your Display, issue reports, and revoke them.
 
 Register your Display once so `Attestation<Audit>` objects render with your name,
 icon, and report links (`0xd` is the system display registry):
@@ -68,9 +80,11 @@ sui client call --package <your-pkg> --module audit \
   --function register_audit_display --args <registry-object-id> 0xd
 ```
 
-Finally, register **a mvr name** for the package and link its git source, so it
-resolves by name and your README renders on its page — see the
-[mvr docs](https://docs.suins.io/move-registry).
+Create **PackageInfo** for this deployment and link verified source at an immutable
+public revision. Then register an MVR name so the package resolves by name and
+its README renders on its page. SuiNS ownership and MVR name management require
+mainnet authorization and gas even for a testnet mapping. Naming does not grant
+consumer trust. Follow the skill's [MVR registration guide](../../skills/auditor-onboarding/references/mvr-registration.md).
 
 ### 3. Custody your capabilities securely
 
@@ -78,11 +92,12 @@ Two objects authorize everything you do — the **`AuditAdminCap`** (issuing and
 revoking) and the **`UpgradeCap`** (changing the schema). Treat them like signing
 keys: whoever holds them can attest in your name.
 
-Hold them in a **multisig** (≥ 2-of-N, kept cold), not a single hot key. Set one
-up and transfer both caps to its address; from then on, issuing and revoking are
-transactions your multisig signs and executes. One tool for managing the
-multisig and for proposing, signing, and executing those transactions is
-[Sagat](https://docs.sui.io/sui-stack/sagat), Mysten's Sui multisig manager.
+We recommend a **multisig** with independently controlled signers for production.
+A single-key setup is supported if you accept its compromise/loss risk. Protect
+both capabilities, not just UpgradeCap; also choose custody for PackageInfo and
+the mainnet MVR AppCap. Create metadata before transferring UpgradeCap, or have
+its custodian authorize that step. See the skill's
+[signing and custody guide](../../skills/auditor-onboarding/references/signing-and-custody.md).
 
 ### 4. Publish reports
 
@@ -93,7 +108,7 @@ sui client ptb \
   --move-call <your-pkg>::audit::attest_audit \
     @<admin-cap> @<registry> @<subject> '"<description>"' '"<report-url>"' \
     '<report-hash>' <published-at-ms> @0x6 \
-  --sender <multisig-address> \
+  --sender @<multisig-address> \
   --serialize-unsigned-transaction > attest-tx.b64
 ```
 
@@ -110,8 +125,8 @@ In a `--move-call` target, the package can be its mvr name — e.g. the
 (`@<registry>`, `@<admin-cap>`, `@<subject>`, …) must be addresses.
 
 This writes the unsigned transaction bytes to `attest-tx.b64`, with the multisig
-as sender; hand that file to your multisig to sign to threshold and execute (for
-example by proposing it in Sagat).
+as sender; hand that file to your multisig to sign to threshold and execute.
+Use the skill's signing guide to inspect the bytes and verify the returned signature.
 
 To **backfill historical reports**, you can put many `attest_audit` calls in one
 PTB — one transaction for your whole back catalogue (a large catalogue may hit
@@ -121,14 +136,15 @@ transaction size limits, in which case you can break the PTB into multiple PTBs)
 sui client ptb \
   --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectA> '"..."' '"..."' '<hash>' <date> @0x6 \
   --move-call <your-pkg>::audit::attest_audit @<admin-cap> @<registry> @<subjectB> '"..."' '"..."' '<hash>' <date> @0x6 \
-  --sender <multisig-address> \
+  --sender @<multisig-address> \
   --serialize-unsigned-transaction > backfill-tx.b64
 ```
 
 ## Listing your attestations
 
-To see every attestation you've issued, query the mainnet GraphQL endpoint
-(`https://graphql.mainnet.sui.io/graphql`) for objects of your attestation type.
+To see every attestation you've issued, query the selected network's GraphQL
+endpoint (`https://graphql.testnet.sui.io/graphql` for the rehearsal, or
+`https://graphql.mainnet.sui.io/graphql` for production) for your attestation type.
 For `Audit`, that's
 `<registry-pkg>::attestations::Attestation<[your-pkg]::audit::Audit>`:
 
@@ -167,7 +183,7 @@ Build the revoke transaction the same way you build an attestation:
 ```sh
 sui client ptb \
   --move-call <your-pkg>::audit::revoke_audit @<admin-cap> @<registry> @<subject> @<attestation-id> @0x6 \
-  --sender <multisig-address> \
+  --sender @<multisig-address> \
   --serialize-unsigned-transaction > revoke-tx.b64
 ```
 
