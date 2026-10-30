@@ -20,12 +20,20 @@ and independently configure which attester package identities it trusts.
 
 ### Mainnet
 
-Published as package
-`0x70b5189985e476f8f2e6f014ed9e2e6aeee71f4cafb07b768c3a7c7467e0e793`, linked
-to the mainnet core registry. Source verification passed. Display registration,
-MVR linkage, and example issuance remain pending. See the
-[mainnet deployment record](../../MAINNET.md) for capabilities, transaction IDs,
-and remaining steps. The demo warning applies on mainnet too.
+Published as a fresh package linked to the mainnet core registry, and named
+`@pkg/attestations-demo` in MVR. Source verification passed, and the Display is
+registered with the fields described above. Two example claims about the package
+itself exist, one live and one revoked. The demo warning applies on mainnet too.
+
+| Object | ID |
+| --- | --- |
+| Package | `0x70b5189985e476f8f2e6f014ed9e2e6aeee71f4cafb07b768c3a7c7467e0e793` |
+| AuditAdminCap | `0xbfe4d979dd69c6cda1928c31455be7804f057df0ff04789bc7d95d129dd5ed8c` |
+| UpgradeCap | `0x87e04d36379c076abd1a3a1568ed662916e294ad2927c98aa34696dfb521e570` |
+| Display | `0x979b540f9eeb84d99da4ddce1c0526babf1e0c2df40f07f84bc2f3890d840bb7` |
+
+See the [mainnet deployment record](../../MAINNET.md) for transaction IDs, the
+example claims, and custody.
 
 ### Testnet
 
@@ -59,9 +67,9 @@ bash scripts/check-template.sh
 ```
 
 [DEPLOYMENT.md](DEPLOYMENT.md) contains the testnet preflight, publishing, MVR
-setup, and live/revoked verification steps. Reuse each network's recorded IDs;
-do not repeat publication or an already completed Display registration. Further
-transactions require separate approval.
+setup, and live/revoked verification steps. Reuse each network's recorded IDs.
+Both networks have completed publication, Display registration, and example
+issuance; do not repeat them. Further transactions require separate approval.
 
 ## Building your own attester
 

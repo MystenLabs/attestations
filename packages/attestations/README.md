@@ -81,5 +81,5 @@ Mainnet:
 
 Both deployments use the current revocation model described above. See
 [Published.toml](Published.toml) for compiler and publication metadata and
-[MAINNET.md](../../MAINNET.md) for mainnet transaction IDs, custody, and pending
-MVR setup. The mainnet MVR name is not yet assigned.
+[MAINNET.md](../../MAINNET.md) for mainnet transaction IDs, MVR records, and
+custody. On mainnet, `@mysten/attestations` resolves to this package.

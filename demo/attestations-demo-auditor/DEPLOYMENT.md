@@ -139,21 +139,24 @@ block this deployment or consumers configured with the new numeric IDs.
 
 Use the new demo package itself as the subject. Do not issue example audits on
 third-party packages without their approval. The link below is documentation,
-not an audit report; `none` deliberately records no report digest.
+not an audit report. It points at the raw file, which GitHub serves with CORS
+headers, and `REPORT_HASH` pins that file's SHA-256 so MVR can recompute the
+digest in the browser and show whether the report still matches.
 
 This creates two example claims and revokes one. Run it once for the release
 smoke test; rerunning creates additional permanent claims.
 
 ```sh
 SUBJECT=$DEMO_PKG
-REPORT_URL="https://github.com/MystenLabs/attestations/blob/$SOURCE_REV/$DEMO/README.md"
+REPORT_URL="https://raw.githubusercontent.com/MystenLabs/attestations/$SOURCE_REV/$DEMO/README.md"
+REPORT_HASH="sha256:$(curl -fsS "$REPORT_URL" | shasum -a 256 | cut -d' ' -f1)"
 PUBLISHED_MS=$(python3 -c 'import time; print(time.time_ns() // 1000000)')
 for state in live revoked; do
   sui client --client.env testnet ptb \
     --move-call "$DEMO_PKG::audit::attest_audit" \
       "@$ADMIN_CAP" "@$REGISTRY" "@$SUBJECT" \
       "\"DEMO ONLY - $state example; no security audit performed.\"" \
-      "\"$REPORT_URL\"" none "$PUBLISHED_MS" @0x6 \
+      "\"$REPORT_URL\"" "some(\"$REPORT_HASH\")" "$PUBLISHED_MS" @0x6 \
     --json >"$OUT/$state.json"
   jq -e '.effects.status.status == "success"' "$OUT/$state.json"
 done
@@ -193,6 +196,8 @@ After indexing, verify:
 - The live claim has `revoked_at_ms: null`; the revoked claim has a timestamp.
 - Both Displays render the demo name and warning, with no Display errors.
 - `project_url` is the repository URL and `image_url` is absent.
+- `link` is `REPORT_URL` and `link_hash` is `REPORT_HASH`, and MVR shows a check
+  beside the hash (it recomputed the report's digest and it matched).
 - MVR's Security tab for the demo subject shows the live example as a demo claim
   and distinguishes the revoked example. Neither is presented as a real audit.
 
